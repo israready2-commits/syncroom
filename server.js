@@ -131,10 +131,10 @@ io.on('connection', (socket) => {
   // Ping
   socket.on('ping-check', () => socket.emit('pong-check'));
 
-  // --- Controles de video ---
+  // --- Controles de video (solo el host puede emitirlos) ---
   socket.on('video-play', ({ currentTime }) => {
     const sala = salas[socket.roomCode];
-    if (!sala) return;
+    if (!sala || sala.host.socketId !== socket.id) return;
     sala.playing = true;
     sala.currentTime = currentTime;
     sala.lastUpdate = Date.now();
@@ -143,15 +143,16 @@ io.on('connection', (socket) => {
 
   socket.on('video-pause', ({ currentTime }) => {
     const sala = salas[socket.roomCode];
-    if (!sala) return;
+    if (!sala || sala.host.socketId !== socket.id) return;
     sala.playing = false;
     sala.currentTime = currentTime;
+    sala.lastUpdate = Date.now();
     socket.to(socket.roomCode).emit('video-pause', { currentTime });
   });
 
   socket.on('video-seek', ({ currentTime }) => {
     const sala = salas[socket.roomCode];
-    if (!sala) return;
+    if (!sala || sala.host.socketId !== socket.id) return;
     sala.currentTime = currentTime;
     sala.lastUpdate = Date.now();
     socket.to(socket.roomCode).emit('video-seek', { currentTime });
@@ -167,12 +168,17 @@ io.on('connection', (socket) => {
     io.to(socket.roomCode).emit('video-change', { videoId, videoType });
   });
 
-  // Sincronización
+  // Sincronización — el servidor calcula el tiempo real ajustando por tiempo transcurrido
   socket.on('sync-request', ({ currentTime }) => {
     const sala = salas[socket.roomCode];
     if (!sala) return;
+    let adjustedTime = sala.currentTime;
+    if (sala.playing && sala.lastUpdate) {
+      const elapsed = (Date.now() - sala.lastUpdate) / 1000;
+      adjustedTime = sala.currentTime + elapsed;
+    }
     socket.emit('sync-response', {
-      currentTime: sala.currentTime,
+      currentTime: adjustedTime,
       serverTimestamp: Date.now()
     });
   });

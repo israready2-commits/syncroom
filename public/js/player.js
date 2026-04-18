@@ -1,28 +1,25 @@
-
 /* ================================
-   SyncRoom — Módulo del Player
+   SyncRoom — Player con sync real
+   HTML5 nativo para Drive · IFrame API para YouTube
    ================================ */
 
 const playerState = {
-  iframe: null,
-  ytPlayer: null,
   videoType: null,       // 'drive' | 'youtube'
   videoId: null,
-  duration: 0,
-  currentTime: 0,
-  playing: false,
   isHost: false,
-  iframeReady: false,
+  ignoreEvents: false,   // evita loops: recibir evento → mover player → disparar evento
   controlsTimeout: null,
   syncCheckInterval: null,
-  onSyncUpdate: null     // callback para actualizar el badge de sync
+  onSyncUpdate: null,
+  videoEl: null,         // <video> HTML5 nativo (Drive)
+  ytPlayer: null,        // objeto YT.Player (YouTube)
 };
 
-/**
- * Inicializa el player.
- */
+/* ========================================================
+   INIT
+   ======================================================== */
 function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
-  playerState.isHost = isHost;
+  playerState.isHost       = isHost;
   playerState.onSyncUpdate = onSyncUpdate;
 
   const wrapper    = document.getElementById('player-wrapper');
@@ -36,7 +33,7 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
   const volSlider  = document.getElementById('vol-slider');
   const fsBtn      = document.getElementById('ctrl-fs');
 
-  // Mostrar/ocultar controles tras inactividad
+  // Ocultar controles tras 3s de inactividad
   function resetControlsTimer() {
     controls && controls.classList.remove('hidden');
     clearTimeout(playerState.controlsTimeout);
@@ -44,56 +41,59 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
       controls && controls.classList.add('hidden');
     }, 3000);
   }
-
   wrapper && wrapper.addEventListener('mousemove', resetControlsTimer);
-  wrapper && wrapper.addEventListener('touchstart', resetControlsTimer);
+  wrapper && wrapper.addEventListener('touchstart', resetControlsTimer, { passive: true });
   resetControlsTimer();
 
-  // Botón play/pause
+  // Play / Pause — solo host
   playBtn && playBtn.addEventListener('click', () => {
-    if (!playerState.isHost) return; // Solo el host controla
+    if (!playerState.isHost) return;
     addRipple(playBtn);
-
-    if (playerState.playing) {
-      pauseVideo();
-      onPause && onPause(playerState.currentTime);
+    const t = getCurrentTime();
+    if (isPlaying()) {
+      pauseLocal();
+      onPause && onPause(t);
     } else {
-      playVideo();
-      onPlay && onPlay(playerState.currentTime);
+      playLocal();
+      onPlay && onPlay(t);
     }
+    updatePlayBtn();
   });
 
-  // Rewind / Forward
+  // Rewind 10s — solo host
   rewindBtn && rewindBtn.addEventListener('click', () => {
     if (!playerState.isHost) return;
-    const newTime = Math.max(0, playerState.currentTime - 10);
-    seekTo(newTime);
-    onSeek && onSeek(newTime);
+    const t = Math.max(0, getCurrentTime() - 10);
+    seekLocal(t);
+    onSeek && onSeek(t);
   });
 
+  // Forward 10s — solo host
   forwardBtn && forwardBtn.addEventListener('click', () => {
     if (!playerState.isHost) return;
-    const newTime = playerState.currentTime + 10;
-    seekTo(newTime);
-    onSeek && onSeek(newTime);
+    const t = getCurrentTime() + 10;
+    seekLocal(t);
+    onSeek && onSeek(t);
   });
 
-  // Barra de progreso
+  // Barra de progreso — solo host
   progressEl && progressEl.addEventListener('click', (e) => {
     if (!playerState.isHost) return;
-    const rect = progressEl.getBoundingClientRect();
+    const rect  = progressEl.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
-    const newTime = ratio * (playerState.duration || 0);
-    seekTo(newTime);
-    onSeek && onSeek(newTime);
+    const dur   = getDuration();
+    if (!dur) return;
+    const t = ratio * dur;
+    seekLocal(t);
+    onSeek && onSeek(t);
   });
 
   // Volumen
   volSlider && volSlider.addEventListener('input', () => {
-    setVolume(Number(volSlider.value) / 100);
+    setVolumeLocal(Number(volSlider.value) / 100);
   });
 
-  // Pantalla completa
+  // Fullscreen
   fsBtn && fsBtn.addEventListener('click', () => {
     const el = document.getElementById('watch-container') || document.documentElement;
     if (!document.fullscreenElement) {
@@ -103,212 +103,315 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
     }
   });
 
-  // Actualizar UI del progreso
+  // Actualizar barra de progreso cada 500ms
   setInterval(() => {
-    updateProgress();
+    updateProgressBar(fillEl, timeEl);
+    updatePlayBtn();
   }, 500);
 
-  // Verificar sync cada 5 segundos
+  // El invitado pide sync al servidor cada 5 segundos
   playerState.syncCheckInterval = setInterval(() => {
     if (!playerState.isHost) {
-      emitSyncRequest(playerState.currentTime);
+      emitSyncRequest(getCurrentTime());
     }
   }, 5000);
 
-  function updateProgress() {
-    if (!playerState.duration) return;
-    const ratio = (playerState.currentTime / playerState.duration) * 100;
-    fillEl && (fillEl.style.width = `${ratio}%`);
-    timeEl && (timeEl.textContent = `${formatTime(playerState.currentTime)} / ${formatTime(playerState.duration)}`);
-    updatePlayBtn();
-  }
-
   function updatePlayBtn() {
     if (!playBtn) return;
-    playBtn.innerHTML = playerState.playing
-      ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>`
-      : `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+    playBtn.innerHTML = isPlaying()
+      ? `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`
+      : `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
   }
-
   updatePlayBtn();
 }
 
-/**
- * Carga un video de Google Drive.
- */
+/* ========================================================
+   CARGAR DRIVE — <video> HTML5 nativo
+   Requiere que el archivo sea público ("cualquiera con el enlace").
+   URL directa de descarga: permite play/pause/seek programático.
+   ======================================================== */
 function loadDriveVideo(fileId) {
-  playerState.videoId = fileId;
   playerState.videoType = 'drive';
-  playerState.playing = false;
-  playerState.currentTime = 0;
+  playerState.videoId   = fileId;
+  playerState.ytPlayer  = null;
 
   const container = document.getElementById('player-inner');
   if (!container) return;
 
+  // URL de stream directo de Drive (funciona si el archivo es compartido públicamente)
+  const streamUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`;
+
   container.innerHTML = `
-    <iframe
-      id="drive-iframe"
-      src="https://drive.google.com/file/d/${fileId}/preview"
-      width="100%" height="100%"
-      allow="autoplay; fullscreen"
-      allowfullscreen
-      frameborder="0"
-      style="border:none; width:100%; height:100%;"
-    ></iframe>
+    <video
+      id="native-video"
+      style="width:100%;height:100%;background:#000;display:block;max-height:100%;"
+      playsinline
+      preload="metadata"
+    >
+      <source src="${streamUrl}" type="video/mp4">
+      <source src="${streamUrl}" type="video/webm">
+    </video>
+    <div id="drive-fallback" style="display:none;width:100%;height:100%;position:absolute;inset:0;background:#000;">
+      <iframe
+        src="https://drive.google.com/file/d/${fileId}/preview"
+        style="width:100%;height:100%;border:none;"
+        allow="autoplay; fullscreen"
+        allowfullscreen
+      ></iframe>
+      <div style="position:absolute;bottom:72px;left:50%;transform:translateX(-50%);background:rgba(124,92,191,0.92);padding:10px 18px;border-radius:10px;font-size:0.78rem;color:#fff;white-space:nowrap;pointer-events:none;text-align:center;">
+        ⚠️ El archivo no es streamable — compártelo como "cualquiera con el enlace"
+      </div>
+    </div>
   `;
 
-  playerState.iframe = document.getElementById('drive-iframe');
-  playerState.iframeReady = true;
-  playerState.duration = 0; // Drive no expone duración directamente
+  const video = document.getElementById('native-video');
+  playerState.videoEl = video;
 
-  // Estimación de duración (placeholder)
-  playerState.duration = 3600; // 1 hora por defecto
-  document.getElementById('player-loading') && (document.getElementById('player-loading').style.display = 'none');
+  // Ocultar loading cuando el video tenga metadata
+  video.addEventListener('loadedmetadata', () => {
+    document.getElementById('player-loading') && (document.getElementById('player-loading').style.display = 'none');
+  });
+
+  // Si el stream directo falla → mostrar iframe embed como fallback
+  video.addEventListener('error', () => {
+    console.warn('[SyncRoom] Stream directo falló, mostrando embed de Drive');
+    video.style.display = 'none';
+    playerState.videoEl = null; // sin control nativo posible
+    const fb = document.getElementById('drive-fallback');
+    if (fb) fb.style.display = 'block';
+    document.getElementById('player-loading') && (document.getElementById('player-loading').style.display = 'none');
+    showToast('⚠️ Comparte el archivo como público en Drive para sync completa', 'error', 7000);
+  });
+
+  // Eventos nativos → emitir por socket (solo host, solo si no es sync remota)
+  video.addEventListener('play', () => {
+    if (playerState.ignoreEvents) return;
+    if (playerState.isHost) emitPlay(video.currentTime);
+    playerState.onSyncUpdate && playerState.onSyncUpdate(true);
+  });
+
+  video.addEventListener('pause', () => {
+    if (playerState.ignoreEvents) return;
+    if (playerState.isHost) emitPause(video.currentTime);
+  });
+
+  video.addEventListener('seeked', () => {
+    if (playerState.ignoreEvents) return;
+    if (playerState.isHost) emitSeek(video.currentTime);
+  });
 }
 
-/**
- * Carga un video de YouTube.
- */
+/* ========================================================
+   CARGAR YOUTUBE — IFrame API
+   ======================================================== */
 function loadYouTubeVideo(videoId) {
-  playerState.videoId = videoId;
   playerState.videoType = 'youtube';
-  playerState.playing = false;
-  playerState.currentTime = 0;
+  playerState.videoId   = videoId;
+  playerState.videoEl   = null;
 
   const container = document.getElementById('player-inner');
   if (!container) return;
 
   container.innerHTML = `<div id="yt-player" style="width:100%;height:100%;"></div>`;
 
-  if (window.YT && window.YT.Player) {
-    crearYTPlayer(videoId);
-  } else {
-    window.onYouTubeIframeAPIReady = () => crearYTPlayer(videoId);
-    if (!document.getElementById('yt-api-script')) {
-      const script = document.createElement('script');
-      script.id = 'yt-api-script';
-      script.src = 'https://www.youtube.com/iframe_api';
-      document.head.appendChild(script);
-    }
-  }
-}
-
-function crearYTPlayer(videoId) {
-  playerState.ytPlayer = new YT.Player('yt-player', {
-    videoId,
-    playerVars: { controls: 0, disablekb: 1, rel: 0, modestbranding: 1 },
-    events: {
-      onReady(e) {
-        playerState.duration = e.target.getDuration();
-        document.getElementById('player-loading') && (document.getElementById('player-loading').style.display = 'none');
+  const crearPlayer = () => {
+    playerState.ytPlayer = new YT.Player('yt-player', {
+      videoId,
+      width: '100%',
+      height: '100%',
+      playerVars: {
+        controls: 0,
+        disablekb: 1,
+        rel: 0,
+        modestbranding: 1,
+        iv_load_policy: 3,
+        playsinline: 1,
       },
-      onStateChange(e) {
-        if (e.data === YT.PlayerState.PLAYING) {
-          playerState.playing = true;
-          playerState.currentTime = playerState.ytPlayer.getCurrentTime();
-          if (playerState.isHost) emitPlay(playerState.currentTime);
-        }
-        if (e.data === YT.PlayerState.PAUSED) {
-          playerState.playing = false;
-          playerState.currentTime = playerState.ytPlayer.getCurrentTime();
-          if (playerState.isHost) emitPause(playerState.currentTime);
+      events: {
+        onReady(e) {
+          e.target.setVolume(80);
+          document.getElementById('player-loading') && (document.getElementById('player-loading').style.display = 'none');
+        },
+        onStateChange(e) {
+          // Solo el host emite eventos. El invitado solo escucha del socket.
+          if (playerState.ignoreEvents) return;
+          if (!playerState.isHost) return;
+          const t = playerState.ytPlayer.getCurrentTime();
+          if (e.data === YT.PlayerState.PLAYING) {
+            emitPlay(t);
+            playerState.onSyncUpdate && playerState.onSyncUpdate(true);
+          }
+          if (e.data === YT.PlayerState.PAUSED) {
+            emitPause(t);
+          }
         }
       }
-    }
-  });
+    });
+  };
 
-  // Actualizar currentTime
-  setInterval(() => {
-    if (playerState.ytPlayer && playerState.ytPlayer.getCurrentTime) {
-      playerState.currentTime = playerState.ytPlayer.getCurrentTime();
+  if (window.YT && window.YT.Player) {
+    crearPlayer();
+  } else {
+    window._ytCallbacks = window._ytCallbacks || [];
+    window._ytCallbacks.push(crearPlayer);
+    if (!document.getElementById('yt-api-script')) {
+      const s   = document.createElement('script');
+      s.id      = 'yt-api-script';
+      s.src     = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(s);
+      window.onYouTubeIframeAPIReady = () => {
+        (window._ytCallbacks || []).forEach(cb => cb());
+      };
     }
-  }, 500);
+  }
 }
 
-// --- Controles de video ---
-
-function playVideo() {
-  playerState.playing = true;
-  if (playerState.videoType === 'youtube' && playerState.ytPlayer) {
+/* ========================================================
+   CONTROLES LOCALES — NO emiten socket.
+   Se usan cuando llega un evento remoto para aplicarlo sin re-emitir.
+   ======================================================== */
+function playLocal() {
+  if (playerState.videoType === 'drive' && playerState.videoEl) {
+    playerState.videoEl.play().catch(console.warn);
+  } else if (playerState.videoType === 'youtube' && playerState.ytPlayer) {
     playerState.ytPlayer.playVideo();
   }
-  // Drive iframe: no tenemos control directo de play nativo, pero enviamos sync
 }
 
-function pauseVideo() {
-  playerState.playing = false;
-  if (playerState.videoType === 'youtube' && playerState.ytPlayer) {
+function pauseLocal() {
+  if (playerState.videoType === 'drive' && playerState.videoEl) {
+    playerState.videoEl.pause();
+  } else if (playerState.videoType === 'youtube' && playerState.ytPlayer) {
     playerState.ytPlayer.pauseVideo();
   }
 }
 
-function seekTo(time) {
-  playerState.currentTime = time;
-  if (playerState.videoType === 'youtube' && playerState.ytPlayer) {
+function seekLocal(time) {
+  if (playerState.videoType === 'drive' && playerState.videoEl) {
+    playerState.videoEl.currentTime = time;
+  } else if (playerState.videoType === 'youtube' && playerState.ytPlayer) {
     playerState.ytPlayer.seekTo(time, true);
   }
 }
 
-function setVolume(vol) {
-  if (playerState.videoType === 'youtube' && playerState.ytPlayer) {
+function setVolumeLocal(vol) {
+  if (playerState.videoType === 'drive' && playerState.videoEl) {
+    playerState.videoEl.volume = vol;
+  } else if (playerState.videoType === 'youtube' && playerState.ytPlayer) {
     playerState.ytPlayer.setVolume(vol * 100);
   }
 }
 
-/**
- * Aplicar sincronización recibida del servidor.
- */
+// Alias para compatibilidad con room.html (onHostLeft llama pauseVideo)
+function pauseVideo() { pauseLocal(); }
+
+/* ========================================================
+   GETTERS
+   ======================================================== */
+function getCurrentTime() {
+  if (playerState.videoType === 'drive' && playerState.videoEl) {
+    return playerState.videoEl.currentTime || 0;
+  }
+  if (playerState.videoType === 'youtube' && playerState.ytPlayer && playerState.ytPlayer.getCurrentTime) {
+    return playerState.ytPlayer.getCurrentTime() || 0;
+  }
+  return 0;
+}
+
+function getDuration() {
+  if (playerState.videoType === 'drive' && playerState.videoEl) {
+    return playerState.videoEl.duration || 0;
+  }
+  if (playerState.videoType === 'youtube' && playerState.ytPlayer && playerState.ytPlayer.getDuration) {
+    return playerState.ytPlayer.getDuration() || 0;
+  }
+  return 0;
+}
+
+function isPlaying() {
+  if (playerState.videoType === 'drive' && playerState.videoEl) {
+    return !playerState.videoEl.paused && !playerState.videoEl.ended;
+  }
+  if (playerState.videoType === 'youtube' && playerState.ytPlayer && playerState.ytPlayer.getPlayerState) {
+    return playerState.ytPlayer.getPlayerState() === 1; // YT.PlayerState.PLAYING
+  }
+  return false;
+}
+
+/* ========================================================
+   HANDLERS REMOTOS — recibidos vía socket
+   ignoreEvents = true evita que el <video> / ytPlayer re-emita el evento
+   ======================================================== */
+
+// El host hizo play → invitado reproduce en el mismo tiempo
+function onRemotePlay({ currentTime }) {
+  playerState.ignoreEvents = true;
+  seekLocal(currentTime);
+  playLocal();
+  setTimeout(() => { playerState.ignoreEvents = false; }, 400);
+  playerState.onSyncUpdate && playerState.onSyncUpdate(true);
+}
+
+// El host pausó → invitado pausa en el mismo tiempo
+function onRemotePause({ currentTime }) {
+  playerState.ignoreEvents = true;
+  seekLocal(currentTime);
+  pauseLocal();
+  setTimeout(() => { playerState.ignoreEvents = false; }, 400);
+}
+
+// El host hizo seek → invitado salta al mismo punto
+function onRemoteSeek({ currentTime }) {
+  playerState.ignoreEvents = true;
+  seekLocal(currentTime);
+  setTimeout(() => { playerState.ignoreEvents = false; }, 400);
+}
+
+// Respuesta del servidor al pedido de sync periódico del invitado
 function applySyncResponse({ currentTime, serverTimestamp }) {
-  const lag = (Date.now() - serverTimestamp) / 1000;
-  const targetTime = currentTime + lag + (socketState.latency / 1000);
-  const diff = Math.abs(targetTime - playerState.currentTime);
+  const lag        = (Date.now() - serverTimestamp) / 1000;
+  const targetTime = currentTime + lag + ((socketState.latency || 0) / 1000);
+  const diff       = Math.abs(targetTime - getCurrentTime());
 
   if (diff > 2) {
-    // Fuera de sync → corregir
-    seekTo(targetTime);
-    showToast('🔄 Sincronizando...', 'info', 1500);
+    // Desync mayor a 2s → corregir silenciosamente
+    playerState.ignoreEvents = true;
+    seekLocal(targetTime);
+    setTimeout(() => { playerState.ignoreEvents = false; }, 400);
     playerState.onSyncUpdate && playerState.onSyncUpdate(false);
+    showToast('🔄 Re-sincronizando...', 'info', 1500);
   } else {
     playerState.onSyncUpdate && playerState.onSyncUpdate(true);
   }
 }
 
-// --- Handlers para eventos de socket ---
-
-function onRemotePlay({ currentTime }) {
-  playerState.currentTime = currentTime;
-  seekTo(currentTime);
-  playVideo();
-  playerState.onSyncUpdate && playerState.onSyncUpdate(true);
+/* ========================================================
+   UI — barra de progreso
+   ======================================================== */
+function updateProgressBar(fillEl, timeEl) {
+  const dur = getDuration();
+  const cur = getCurrentTime();
+  const pct = dur > 0 ? (cur / dur) * 100 : 0;
+  fillEl && (fillEl.style.width = `${pct}%`);
+  timeEl && (timeEl.textContent = `${formatTime(cur)} / ${formatTime(dur)}`);
 }
 
-function onRemotePause({ currentTime }) {
-  playerState.currentTime = currentTime;
-  seekTo(currentTime);
-  pauseVideo();
-}
-
-function onRemoteSeek({ currentTime }) {
-  playerState.currentTime = currentTime;
-  seekTo(currentTime);
-}
-
-// --- Helpers ---
-
+/* ========================================================
+   HELPERS
+   ======================================================== */
 function formatTime(secs) {
-  const s = Math.floor(secs);
-  const m = Math.floor(s / 60);
-  const h = Math.floor(m / 60);
+  if (!secs || isNaN(secs)) return '00:00';
+  const s  = Math.floor(secs);
+  const m  = Math.floor(s / 60);
+  const h  = Math.floor(m / 60);
   const ss = String(s % 60).padStart(2, '0');
   const mm = String(m % 60).padStart(2, '0');
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 function addRipple(btn) {
-  const ripple = document.createElement('span');
-  ripple.className = 'play-ripple';
-  btn.appendChild(ripple);
-  setTimeout(() => ripple.remove(), 600);
+  const r     = document.createElement('span');
+  r.className = 'play-ripple';
+  btn.appendChild(r);
+  setTimeout(() => r.remove(), 600);
 }
-
-
