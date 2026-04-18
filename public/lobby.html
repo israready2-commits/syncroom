@@ -250,7 +250,17 @@
   <script src="/js/avatar.js"></script>
   <script src="/js/toast.js"></script>
   <script src="/js/socket.js"></script>
-  <script src="/js/drive.js"></script>
+  <!-- FIX: cargar drive.js DESPUÉS de recibir las claves -->
+<script>
+  fetch('/api/config').then(r => r.json()).then(cfg => {
+    window.GOOGLE_CLIENT_ID = cfg.googleClientId;
+    window.GOOGLE_API_KEY = cfg.googleApiKey;
+    const s = document.createElement('script');
+    s.src = '/js/drive.js';
+    document.body.appendChild(s);
+  });
+</script>
+
   <script>
     // --- Leer parámetros de la URL ---
     const urlParams  = new URLSearchParams(window.location.search);
