@@ -11,7 +11,9 @@
   <style>
     html, body { height: 100%; overflow: hidden; }
 
+
     body { display: flex; flex-direction: column; }
+
 
     /* ======= HEADER ======= */
     .watch-header {
@@ -25,12 +27,14 @@
       z-index: 10;
     }
 
+
     .header-code {
       display: flex;
       align-items: center;
       gap: 8px;
       margin: 0 auto;
     }
+
 
     .header-code-val {
       font-family: var(--font-display);
@@ -40,10 +44,12 @@
       color: var(--color-text-muted);
     }
 
+
     .header-avatars {
       display: flex;
       gap: -4px;
     }
+
 
     .header-avatars .avatar {
       width: 28px;
@@ -52,7 +58,9 @@
       margin-left: -4px;
     }
 
+
     .header-avatars .avatar:first-child { margin-left: 0; }
+
 
     /* ======= MAIN AREA ======= */
     .watch-main {
@@ -60,6 +68,7 @@
       flex: 1;
       overflow: hidden;
     }
+
 
     /* ======= PLAYER ZONE ======= */
     .player-zone {
@@ -69,6 +78,7 @@
       overflow: hidden;
       position: relative;
     }
+
 
     #player-wrapper {
       flex: 1;
@@ -80,10 +90,12 @@
       justify-content: center;
     }
 
+
     #player-inner {
       width: 100%;
       height: 100%;
     }
+
 
     #player-loading {
       position: absolute;
@@ -98,12 +110,14 @@
       z-index: 5;
     }
 
+
     .sync-badge-container {
       position: absolute;
       top: 12px;
       right: 12px;
       z-index: 20;
     }
+
 
     /* ======= SIDE PANEL ======= */
     .side-panel {
@@ -116,10 +130,12 @@
       overflow: hidden;
     }
 
+
     .side-tabs {
       display: flex;
       border-bottom: 1px solid var(--color-border);
     }
+
 
     .side-tab {
       flex: 1;
@@ -133,10 +149,12 @@
       border-bottom: 2px solid transparent;
     }
 
+
     .side-tab.active {
       color: var(--color-primary);
       border-bottom-color: var(--color-primary);
     }
+
 
     .tab-content {
       flex: 1;
@@ -145,9 +163,11 @@
       flex-direction: column;
     }
 
+
     .tab-content.active {
       display: flex;
     }
+
 
     /* ======= QUEUE ======= */
     .queue-list {
@@ -159,12 +179,14 @@
       gap: 4px;
     }
 
+
     .queue-empty {
       text-align: center;
       color: var(--color-text-muted);
       font-size: 0.8125rem;
       padding: 32px 16px;
     }
+
 
     .queue-add-btn {
       margin: 12px;
@@ -181,16 +203,19 @@
       transition: var(--transition);
     }
 
+
     .queue-add-btn:hover {
       border-color: var(--color-primary);
       color: var(--color-primary);
       background: var(--color-primary-deep);
     }
 
+
     /* ======= CHAT PANEL ======= */
     #tab-chat {
       background: var(--color-surface);
     }
+
 
     /* ======= BOTTOM CHAT (mobile) ======= */
     .bottom-chat {
@@ -201,20 +226,27 @@
       background: var(--color-surface);
     }
 
+
     /* ======= MOBILE ======= */
     @media (max-width: 768px) {
       .watch-main { flex-direction: column; }
 
+
       .side-panel { display: none; }
+
 
       .player-zone { flex: none; height: 56vw; min-height: 200px; }
 
+
       .bottom-chat { display: flex; }
+
 
       .watch-header { padding: 10px 16px; }
 
+
       .header-code-val { font-size: 0.8125rem; }
     }
+
 
     /* ======= FULLSCREEN ======= */
     :fullscreen #player-wrapper,
@@ -223,6 +255,7 @@
       height: 100vh;
     }
 
+
     :fullscreen .watch-header,
     :-webkit-full-screen .watch-header,
     :fullscreen .side-panel,
@@ -230,11 +263,13 @@
       display: none;
     }
 
+
     :fullscreen .player-zone,
     :-webkit-full-screen .player-zone {
       width: 100vw;
       height: 100vh;
     }
+
 
     /* Chat flotante en fullscreen */
     .fs-chat {
@@ -252,8 +287,10 @@
       z-index: 50;
     }
 
+
     :fullscreen .fs-chat.visible { display: flex; }
     :-webkit-full-screen .fs-chat.visible { display: flex; }
+
 
     .fs-chat-toggle {
       display: none;
@@ -270,18 +307,23 @@
       cursor: pointer;
     }
 
+
     :fullscreen .fs-chat-toggle { display: flex; }
     :-webkit-full-screen .fs-chat-toggle { display: flex; }
 
+
     :fullscreen .fs-chat.visible + .fs-chat-toggle,
     :-webkit-full-screen .fs-chat.visible + .fs-chat-toggle { display: none; }
+
 
     /* Player controls custom */
     #player-controls {
       z-index: 10;
     }
 
+
     .ctrl-time { color: rgba(255,255,255,0.6); font-size: 0.8125rem; margin-left: auto; }
+
 
     /* Host indicator cuando no es host */
     .host-ctrl-note {
@@ -290,6 +332,7 @@
       color: var(--color-text-muted);
       padding: 8px;
     }
+
 
     /* Agregar video YouTube desde sala */
     .add-yt-modal {
@@ -303,6 +346,7 @@
       padding: 24px;
     }
 
+
     .add-yt-box {
       background: var(--color-surface);
       border: 1px solid var(--color-border);
@@ -313,6 +357,7 @@
       animation: scaleIn 0.2s ease;
     }
 
+
     .participants-header {
       display: flex;
       align-items: center;
@@ -320,6 +365,7 @@
       padding: 10px 16px 6px;
       border-bottom: 1px solid var(--color-border);
     }
+
 
     .participant-mini {
       display: flex;
@@ -332,6 +378,7 @@
 </head>
 <body>
 
+
   <!-- HEADER -->
   <header class="watch-header">
     <a href="/" class="logo">
@@ -343,6 +390,7 @@
       <span class="logo-text" style="font-size:1rem;">Sync<span>Room</span></span>
     </a>
 
+
     <div class="header-code">
       <span class="header-code-val" id="header-code">---</span>
       <button class="copy-btn" style="padding:5px 10px;font-size:0.75rem;" onclick="copiarCodigo()">
@@ -350,26 +398,32 @@
       </button>
     </div>
 
+
     <div class="header-avatars" id="header-avatars">
       <!-- avatares de participantes -->
     </div>
   </header>
 
+
   <!-- MAIN -->
   <div class="watch-main" id="watch-container">
+
 
     <!-- PLAYER ZONE -->
     <div class="player-zone">
       <div id="player-wrapper">
 
+
         <!-- Video -->
         <div id="player-inner" style="width:100%;height:100%;"></div>
+
 
         <!-- Loading -->
         <div id="player-loading">
           <div class="spinner"></div>
           <span>Cargando video...</span>
         </div>
+
 
         <!-- Sync badge -->
         <div class="sync-badge-container">
@@ -379,13 +433,16 @@
           </div>
         </div>
 
+
         <!-- Controles del player -->
         <div class="player-controls" id="player-controls">
+
 
           <!-- Barra de progreso -->
           <div class="progress-bar" id="progress-bar">
             <div class="progress-fill" id="progress-fill" style="width:0%"></div>
           </div>
+
 
           <!-- Fila de controles -->
           <div class="controls-row">
@@ -393,42 +450,52 @@
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 3C7.81 3 4.37 6.35 3.15 10.5H1l4 4 4-4H6.31C7.43 6.55 9.73 5 12.5 5A7.5 7.5 0 1 1 5 12.5H3A9.5 9.5 0 1 0 12.5 3zm-1 5v5.25l4.5 2.67-.75 1.23L10 14V8h1.5z"/></svg>
             </button>
 
+
             <button class="ctrl-btn ctrl-btn-play" id="ctrl-play">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             </button>
 
+
             <button class="ctrl-btn" id="ctrl-forward" title="Avanzar 10s">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11.5 3A9.5 9.5 0 0 0 2 12.5H0l4 4 4-4H5.5A7.5 7.5 0 1 1 13 19.94V21.97A9.5 9.5 0 1 0 11.5 3zm.5 5h1.5v5.25l3.5 2.08-.75 1.23L12 14V8z"/></svg>
             </button>
+
 
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.5);flex-shrink:0;">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
             </svg>
             <input type="range" class="volume-slider" id="vol-slider" min="0" max="100" value="80">
 
+
             <div class="ctrl-time" id="time-display">00:00 / 00:00</div>
+
 
             <button class="ctrl-btn" id="ctrl-fs" title="Pantalla completa">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
             </button>
           </div>
 
+
           <div id="host-note" style="display:none;" class="host-ctrl-note">
             Solo el host puede controlar el video
           </div>
         </div>
 
+
       </div>
     </div>
 
+
     <!-- PANEL LATERAL -->
     <aside class="side-panel">
+
 
       <!-- Tabs -->
       <div class="side-tabs">
         <div class="side-tab active" id="tab-queue-btn" onclick="showTab('queue')">Cola</div>
         <div class="side-tab" id="tab-chat-btn" onclick="showTab('chat')">Chat</div>
       </div>
+
 
       <!-- Tab: Cola de videos -->
       <div class="tab-content active" id="tab-queue">
@@ -443,6 +510,7 @@
         </div>
       </div>
 
+
       <!-- Tab: Chat -->
       <div class="tab-content" id="tab-chat" style="background:var(--color-surface);">
         <div class="chat-messages" id="chat-messages"></div>
@@ -454,7 +522,9 @@
         </div>
       </div>
 
+
     </aside>
+
 
     <!-- CHAT MOBILE (bottom) -->
     <div class="bottom-chat" id="bottom-chat">
@@ -467,7 +537,9 @@
       </div>
     </div>
 
+
   </div>
+
 
   <!-- Chat flotante en fullscreen -->
   <div class="fs-chat" id="fs-chat">
@@ -480,9 +552,11 @@
     </div>
   </div>
 
+
   <div class="fs-chat-toggle" id="fs-chat-toggle" onclick="toggleFsChat()">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
   </div>
+
 
   <!-- Modal agregar YouTube desde sala -->
   <div class="add-yt-modal" id="add-yt-modal" style="display:none;">
@@ -496,8 +570,10 @@
     </div>
   </div>
 
+
   <!-- Toasts -->
   <div id="toast-container"></div>
+
 
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="/js/avatar.js"></script>
@@ -505,13 +581,17 @@
   <script src="/js/socket.js"></script>
   <script src="/js/player.js"></script>
   <script src="/js/chat.js"></script>
+
+  <!-- ✅ FIX: drive.js se carga DESPUÉS de recibir las claves -->
   <script>
-  fetch('/api/config').then(r => r.json()).then(cfg => {
-    window.GOOGLE_CLIENT_ID = cfg.googleClientId;
-    window.GOOGLE_API_KEY = cfg.googleApiKey;
-  });
-</script>
-<script src="/js/drive.js"></script>
+    fetch('/api/config').then(r => r.json()).then(cfg => {
+      window.GOOGLE_CLIENT_ID = cfg.googleClientId;
+      window.GOOGLE_API_KEY = cfg.googleApiKey;
+      const s = document.createElement('script');
+      s.src = '/js/drive.js';
+      document.body.appendChild(s);
+    });
+  </script>
 
   <script>
     // --- Parámetros de URL ---
@@ -522,17 +602,14 @@
     const initVid  = params.get('vid');
     const initType = params.get('vtype') || 'drive';
 
+
     document.getElementById('header-code').textContent = roomCode;
     document.title = `SyncRoom — ${roomCode}`;
 
-    // Lista de videos en cola (en memoria)
     const videoQueue = [];
     let activeVideoIndex = -1;
-
-    // Participantes
     const partsMap = {};
 
-    // --- Tabs ---
     function showTab(tab) {
       document.getElementById('tab-queue').classList.toggle('active', tab === 'queue');
       document.getElementById('tab-chat').classList.toggle('active', tab === 'chat');
@@ -540,7 +617,6 @@
       document.getElementById('tab-chat-btn').classList.toggle('active', tab === 'chat');
     }
 
-    // --- Sync badge ---
     function updateSyncBadge(synced) {
       const badge = document.getElementById('sync-badge');
       const text  = document.getElementById('sync-text');
@@ -548,16 +624,10 @@
       text.textContent = synced ? 'Sincronizados' : 'Sincronizando';
     }
 
-    // --- Chat ---
     const chat = initChat('chat-messages', 'chat-input', 'chat-send', userName);
-
-    // Chat mobile
     const chatMobile = initChat('chat-messages-mobile', 'chat-input-mobile', 'chat-send-mobile', userName);
-
-    // Chat fullscreen
     const chatFs = initChat('chat-messages-fs', 'chat-input-fs', 'chat-send-fs', userName);
 
-    // Sobreescribir addMessage para enviar a los 3 paneles
     const origAdd = chat.addMessage.bind(chat);
     chat.addMessage = function(data) {
       origAdd(data);
@@ -572,7 +642,6 @@
       chatFs.addSystemMessage(text);
     };
 
-    // --- Participantes ---
     function agregarParticipante(name, avatarSeed, esHost) {
       if (partsMap[name]) return;
       partsMap[name] = { name, avatarSeed, esHost };
@@ -618,7 +687,6 @@
 
     agregarParticipante(userName, userName.toLowerCase(), isHost);
 
-    // --- Cola de videos ---
     function agregarAQueue(videoId, videoType, nombre) {
       videoQueue.push({ videoId, videoType, nombre: nombre || videoId });
       renderQueue();
@@ -627,12 +695,10 @@
     function renderQueue() {
       const list = document.getElementById('queue-list');
       list.innerHTML = '';
-
       if (videoQueue.length === 0) {
         list.innerHTML = '<div class="queue-empty">Sin videos en cola</div>';
         return;
       }
-
       videoQueue.forEach((v, i) => {
         const item = document.createElement('div');
         item.className = `queue-item${i === activeVideoIndex ? ' active' : ''}`;
@@ -644,15 +710,12 @@
           ${v.videoType === 'youtube' ? '<span style="font-size:0.625rem;color:#FF0000;font-weight:600;">YT</span>' : ''}
         `;
         if (isHost) {
-          item.addEventListener('click', () => {
-            emitVideoChange(v.videoId, v.videoType);
-          });
+          item.addEventListener('click', () => { emitVideoChange(v.videoId, v.videoType); });
         }
         list.appendChild(item);
       });
     }
 
-    // Botones de agregar (solo host)
     const queueAddArea = document.getElementById('queue-add-area');
     if (isHost) {
       queueAddArea.innerHTML = `
@@ -673,7 +736,6 @@
       document.getElementById('host-note').style.display = 'block';
     }
 
-    // --- Player ---
     initPlayer({
       isHost,
       onPlay:  (t) => { emitPlay(t);  updateSyncBadge(true); },
@@ -682,12 +744,10 @@
       onSyncUpdate: updateSyncBadge
     });
 
-    // Cargar video inicial si viene en URL
     if (initVid) {
       agregarAQueue(initVid, initType, initVid);
       activeVideoIndex = 0;
       renderQueue();
-
       if (initType === 'youtube') {
         loadYouTubeVideo(initVid);
       } else {
@@ -695,88 +755,51 @@
       }
     }
 
-    // --- Socket ---
     initSocket({
-      roomCode,
-      userName,
-      avatarSeed: userName.toLowerCase(),
-      isHost,
-
+      roomCode, userName, avatarSeed: userName.toLowerCase(), isHost,
       onRoomState(state) {
         if (state.host) agregarParticipante(state.host.userName, state.host.avatarSeed, true);
         if (state.guest) agregarParticipante(state.guest.userName, state.guest.avatarSeed, false);
-
         if (state.video && !initVid) {
           cargarVideoDesdeSocket(state.video, state.videoType);
           if (state.playing) {
-            setTimeout(() => {
-              onRemotePlay({ currentTime: state.currentTime });
-              updateSyncBadge(true);
-            }, 1500);
+            setTimeout(() => { onRemotePlay({ currentTime: state.currentTime }); updateSyncBadge(true); }, 1500);
           }
         }
       },
-
       onUserJoined(data) {
         agregarParticipante(data.userName, data.avatarSeed, data.isHost);
         chat.addSystemMessage(`${data.userName} se unió a la sala`);
         showToast(`🌟 ${data.userName} se unió`, 'success');
       },
-
       onUserLeft(data) {
         quitarParticipante(data.userName);
         chat.addSystemMessage(`${data.userName} salió de la sala`);
         showToast(`${data.userName} salió de la sala`, 'info');
       },
-
       onHostLeft(data) {
         chat.addSystemMessage(`${data.userName} (host) se desconectó`);
         showToast('⚠️ El host se desconectó — sala pausada', 'error', 5000);
         pauseVideo();
       },
-
-      onSystemMessage(msg) {
-        // Ya manejado arriba
-      },
-
-      onChatMessage(data) {
-        chat.addMessage(data);
-      },
-
-      onVideoPlay(data) {
-        onRemotePlay(data);
-        updateSyncBadge(true);
-      },
-
-      onVideoPause(data) {
-        onRemotePause(data);
-      },
-
-      onVideoSeek(data) {
-        onRemoteSeek(data);
-      },
-
+      onSystemMessage(msg) {},
+      onChatMessage(data) { chat.addMessage(data); },
+      onVideoPlay(data) { onRemotePlay(data); updateSyncBadge(true); },
+      onVideoPause(data) { onRemotePause(data); },
+      onVideoSeek(data) { onRemoteSeek(data); },
       onVideoChange(data) {
         cargarVideoDesdeSocket(data.videoId, data.videoType);
         agregarAQueue(data.videoId, data.videoType, data.videoId);
         activeVideoIndex = videoQueue.length - 1;
         renderQueue();
       },
-
-      onSyncResponse(data) {
-        applySyncResponse(data);
-      }
+      onSyncResponse(data) { applySyncResponse(data); }
     });
 
     function cargarVideoDesdeSocket(videoId, videoType) {
-      if (videoType === 'youtube') {
-        loadYouTubeVideo(videoId);
-      } else {
-        loadDriveVideo(videoId);
-      }
+      if (videoType === 'youtube') { loadYouTubeVideo(videoId); } else { loadDriveVideo(videoId); }
     }
 
-    // --- Google Drive ---
     initGooglePicker(({ fileId, fileName }) => {
       showToast(`🎬 Cargando "${fileName}"...`, 'info');
       emitVideoChange(fileId, 'drive');
@@ -786,14 +809,8 @@
       loadDriveVideo(fileId);
     });
 
-    // --- YouTube modal desde room ---
-    function abrirYTModal() {
-      document.getElementById('add-yt-modal').style.display = 'flex';
-    }
-
-    function cerrarYTModal() {
-      document.getElementById('add-yt-modal').style.display = 'none';
-    }
+    function abrirYTModal() { document.getElementById('add-yt-modal').style.display = 'flex'; }
+    function cerrarYTModal() { document.getElementById('add-yt-modal').style.display = 'none'; }
 
     function cargarYTDesdeRoom() {
       const url = document.getElementById('yt-room-input').value.trim();
@@ -807,12 +824,10 @@
       loadYouTubeVideo(videoId);
     }
 
-    // --- Copiar código ---
     function copiarCodigo() {
       navigator.clipboard.writeText(roomCode).then(() => showToast('📋 Código copiado', 'info'));
     }
 
-    // --- Fullscreen chat toggle ---
     function toggleFsChat() {
       const chat = document.getElementById('fs-chat');
       chat.classList.toggle('visible');
