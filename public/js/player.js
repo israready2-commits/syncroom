@@ -1,6 +1,6 @@
 /* ================================
-   SyncRoom — Player v3
-   Drive: embed iframe + sync por postMessage/señales
+   SyncRoom — Player v4
+   Drive: embed iframe + capa de intercepción + reloj manual
    YouTube: IFrame API completa
    ================================ */
 
@@ -13,11 +13,11 @@ const playerState = {
   syncCheckInterval: null,
   onSyncUpdate: null,
   ytPlayer: null,
-  // Para Drive: rastreamos tiempo manualmente
-  driveStartTime: null,    // Date.now() cuando se dio play
-  driveOffset: 0,          // segundos acumulados antes del último play
+  // Reloj manual para Drive (el iframe no expone currentTime)
+  driveStartTime: null,   // Date.now() del último play
+  driveOffset: 0,         // segundos acumulados antes del último play
   drivePlaying: false,
-  driveDuration: 7200,     // 2h por defecto (Drive no lo expone)
+  driveDuration: 7200,    // 2h por defecto
 };
 
 /* ========================================================
@@ -38,7 +38,7 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
   const volSlider  = document.getElementById('vol-slider');
   const fsBtn      = document.getElementById('ctrl-fs');
 
-  // Controles: ocultar tras 3s
+  // Ocultar controles tras 3s de inactividad
   function resetControlsTimer() {
     controls && controls.classList.remove('hidden');
     clearTimeout(playerState.controlsTimeout);
@@ -48,9 +48,13 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
   }
   wrapper && wrapper.addEventListener('mousemove', resetControlsTimer);
   wrapper && wrapper.addEventListener('touchstart', resetControlsTimer, { passive: true });
+  // La capa de intercepción también reactiva los controles
+  document.addEventListener('click', (e) => {
+    if (e.target.id === 'drive-intercept') resetControlsTimer();
+  });
   resetControlsTimer();
 
-  // Play / Pause
+  // Play / Pause — solo host
   playBtn && playBtn.addEventListener('click', () => {
     if (!playerState.isHost) return;
     addRipple(playBtn);
@@ -81,21 +85,19 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
     onSeek && onSeek(t);
   });
 
-  // Barra de progreso
+  // Barra de progreso — solo host
   progressEl && progressEl.addEventListener('click', (e) => {
     if (!playerState.isHost) return;
     const rect  = progressEl.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    const t     = ratio * playerState.driveDuration;
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const t     = ratio * getDuration();
     seekLocal(t);
     onSeek && onSeek(t);
   });
 
-  // Volumen (solo YouTube — Drive iframe no lo expone)
+  // Volumen (solo YouTube)
   volSlider && volSlider.addEventListener('input', () => {
-    if (playerState.ytPlayer) {
-      playerState.ytPlayer.setVolume(Number(volSlider.value));
-    }
+    if (playerState.ytPlayer) playerState.ytPlayer.setVolume(Number(volSlider.value));
   });
 
   // Fullscreen
@@ -108,17 +110,15 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
     }
   });
 
-  // Actualizar UI cada 500ms
+  // Actualizar barra de progreso cada 500ms
   setInterval(() => {
     updateProgressBar(fillEl, timeEl);
     updatePlayBtn();
   }, 500);
 
-  // El invitado verifica sync cada 5s
+  // Invitado verifica sync cada 5s
   playerState.syncCheckInterval = setInterval(() => {
-    if (!playerState.isHost) {
-      emitSyncRequest(getCurrentTime());
-    }
+    if (!playerState.isHost) emitSyncRequest(getCurrentTime());
   }, 5000);
 
   function updatePlayBtn() {
@@ -131,83 +131,110 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
 }
 
 /* ========================================================
-   CARGAR DRIVE
-   Usa embed /preview con parámetro t= para seek inicial.
-   La sincronización se hace recargando el iframe con el tiempo correcto.
+   DRIVE — embed iframe con capa de intercepción
+
+   La capa transparente (#drive-intercept) se pone ENCIMA del
+   iframe. Esto hace que:
+   - El iframe cargue y reproduzca el video normalmente
+   - Ningún click llegue al iframe (el usuario no puede usar
+     los controles nativos de Drive)
+   - Nuestros controles custom son los únicos que funcionan
    ======================================================== */
 function loadDriveVideo(fileId) {
-  playerState.videoType    = 'drive';
-  playerState.videoId      = fileId;
-  playerState.ytPlayer     = null;
-  playerState.drivePlaying = false;
-  playerState.driveOffset  = 0;
+  playerState.videoType      = 'drive';
+  playerState.videoId        = fileId;
+  playerState.ytPlayer       = null;
+  playerState.drivePlaying   = false;
+  playerState.driveOffset    = 0;
   playerState.driveStartTime = null;
 
-  const container = document.getElementById('player-inner');
-  if (!container) return;
-
-  _renderDriveIframe(fileId, 0);
-
+  _buildDrivePlayer(fileId, 0, false);
   document.getElementById('player-loading') && (document.getElementById('player-loading').style.display = 'none');
 }
 
-function _renderDriveIframe(fileId, startSeconds) {
+function _buildDrivePlayer(fileId, startSecs, autoplay) {
   const container = document.getElementById('player-inner');
   if (!container) return;
 
-  // El parámetro t= en el embed de Drive hace que empiece en ese segundo
-  const t = Math.floor(startSeconds);
+  const t   = Math.floor(Math.max(0, startSecs));
+  // El #t= en el embed hace que Drive empiece desde ese segundo
   const src = `https://drive.google.com/file/d/${fileId}/preview${t > 0 ? `#t=${t}` : ''}`;
 
   container.innerHTML = `
-    <div style="position:relative;width:100%;height:100%;background:#000;">
+    <div style="position:relative;width:100%;height:100%;background:#000;overflow:hidden;">
+
+      <!-- El iframe reproduce el video -->
       <iframe
         id="drive-iframe"
         src="${src}"
-        style="width:100%;height:100%;border:none;display:block;"
+        style="
+          position:absolute;
+          /* Agrandar el iframe para ocultar la barra de controles
+             nativa de Drive que aparece en la parte inferior */
+          top: -4px;
+          left: 0;
+          width: 100%;
+          height: calc(100% + 60px);
+          border: none;
+          pointer-events: none;
+        "
         allow="autoplay; fullscreen"
         allowfullscreen
         referrerpolicy="no-referrer-when-downgrade"
       ></iframe>
-      ${!playerState.drivePlaying ? `
-        <div id="drive-overlay" style="
-          position:absolute;inset:0;
-          background:rgba(13,13,20,0.75);
-          display:flex;flex-direction:column;
-          align-items:center;justify-content:center;gap:12px;
-          cursor:pointer;
-        " onclick="hostClickPlay()">
-          <div style="
-            width:72px;height:72px;
-            background:var(--color-primary);
-            border-radius:50%;
-            display:flex;align-items:center;justify-content:center;
-            box-shadow:0 0 32px var(--color-primary-glow);
-          ">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-          </div>
-          <span style="color:rgba(255,255,255,0.7);font-size:0.875rem;">
-            ${playerState.isHost ? 'Click para reproducir' : 'Esperando que el host reproduzca...'}
-          </span>
+
+      <!-- Capa transparente que intercepta TODOS los clicks
+           impidiendo que lleguen al iframe de Drive -->
+      <div
+        id="drive-intercept"
+        style="
+          position:absolute;
+          inset:0;
+          z-index:5;
+          cursor:default;
+          /* Sin background para que sea invisible */
+        "
+      ></div>
+
+      <!-- Pantalla de pausa: visible cuando está pausado -->
+      <div id="drive-pause-overlay" style="
+        display: ${autoplay ? 'none' : 'flex'};
+        position:absolute;
+        inset:0;
+        z-index:6;
+        background: rgba(13,13,20,0.6);
+        align-items:center;
+        justify-content:center;
+        flex-direction:column;
+        gap:12px;
+        pointer-events:none;
+      ">
+        <div style="
+          width:80px;height:80px;
+          background:var(--color-primary);
+          border-radius:50%;
+          display:flex;align-items:center;justify-content:center;
+          box-shadow:0 0 40px var(--color-primary-glow);
+          opacity:0.95;
+        ">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
         </div>
-      ` : ''}
+        <span style="color:rgba(255,255,255,0.8);font-size:0.9rem;font-family:var(--font-body);">
+          ${playerState.isHost ? 'Presiona ▶ para reproducir' : 'Esperando al host...'}
+        </span>
+      </div>
+
     </div>
   `;
 }
 
-// El host hace click en el overlay → da play y notifica
-function hostClickPlay() {
-  if (!playerState.isHost) return;
-  const t = playerState.driveOffset;
-  playLocal();
-  emitPlay(t);
-  // Quitar overlay
-  const overlay = document.getElementById('drive-overlay');
-  if (overlay) overlay.remove();
+function _showDrivePauseOverlay(show) {
+  const overlay = document.getElementById('drive-pause-overlay');
+  if (overlay) overlay.style.display = show ? 'flex' : 'none';
 }
 
 /* ========================================================
-   CARGAR YOUTUBE — IFrame API completa
+   YOUTUBE — IFrame API
    ======================================================== */
 function loadYouTubeVideo(videoId) {
   playerState.videoType = 'youtube';
@@ -215,14 +242,12 @@ function loadYouTubeVideo(videoId) {
 
   const container = document.getElementById('player-inner');
   if (!container) return;
-
   container.innerHTML = `<div id="yt-player" style="width:100%;height:100%;"></div>`;
 
   const crearPlayer = () => {
     playerState.ytPlayer = new YT.Player('yt-player', {
       videoId,
-      width: '100%',
-      height: '100%',
+      width: '100%', height: '100%',
       playerVars: { controls: 0, disablekb: 1, rel: 0, modestbranding: 1, iv_load_policy: 3, playsinline: 1 },
       events: {
         onReady(e) {
@@ -232,13 +257,8 @@ function loadYouTubeVideo(videoId) {
         onStateChange(e) {
           if (playerState.ignoreEvents || !playerState.isHost) return;
           const t = playerState.ytPlayer.getCurrentTime();
-          if (e.data === YT.PlayerState.PLAYING) {
-            emitPlay(t);
-            playerState.onSyncUpdate && playerState.onSyncUpdate(true);
-          }
-          if (e.data === YT.PlayerState.PAUSED) {
-            emitPause(t);
-          }
+          if (e.data === YT.PlayerState.PLAYING)  { emitPlay(t);  playerState.onSyncUpdate && playerState.onSyncUpdate(true); }
+          if (e.data === YT.PlayerState.PAUSED)   { emitPause(t); }
         }
       }
     });
@@ -251,8 +271,8 @@ function loadYouTubeVideo(videoId) {
     window._ytCallbacks.push(crearPlayer);
     if (!document.getElementById('yt-api-script')) {
       const s = document.createElement('script');
-      s.id    = 'yt-api-script';
-      s.src   = 'https://www.youtube.com/iframe_api';
+      s.id = 'yt-api-script';
+      s.src = 'https://www.youtube.com/iframe_api';
       document.head.appendChild(s);
       window.onYouTubeIframeAPIReady = () => (window._ytCallbacks || []).forEach(cb => cb());
     }
@@ -264,10 +284,13 @@ function loadYouTubeVideo(videoId) {
    ======================================================== */
 function playLocal() {
   if (playerState.videoType === 'drive') {
-    // Recargar iframe desde el offset actual para forzar autoplay
+    const t = getCurrentTime();
+    playerState.driveOffset    = t;
     playerState.drivePlaying   = true;
     playerState.driveStartTime = Date.now();
-    _renderDriveIframe(playerState.videoId, playerState.driveOffset);
+    // Reconstruir iframe con autoplay en el segundo correcto
+    _buildDrivePlayer(playerState.videoId, t, true);
+    _showDrivePauseOverlay(false);
     playerState.onSyncUpdate && playerState.onSyncUpdate(true);
   } else if (playerState.ytPlayer) {
     playerState.ytPlayer.playVideo();
@@ -277,13 +300,13 @@ function playLocal() {
 function pauseLocal() {
   if (playerState.videoType === 'drive') {
     if (playerState.drivePlaying && playerState.driveStartTime) {
-      // Acumular tiempo transcurrido
       playerState.driveOffset += (Date.now() - playerState.driveStartTime) / 1000;
     }
     playerState.drivePlaying   = false;
     playerState.driveStartTime = null;
-    // Recargar iframe pausado en el segundo actual
-    _renderDriveIframe(playerState.videoId, playerState.driveOffset);
+    // Reconstruir iframe pausado en el segundo actual
+    _buildDrivePlayer(playerState.videoId, playerState.driveOffset, false);
+    _showDrivePauseOverlay(true);
   } else if (playerState.ytPlayer) {
     playerState.ytPlayer.pauseVideo();
   }
@@ -292,23 +315,16 @@ function pauseLocal() {
 function seekLocal(time) {
   if (playerState.videoType === 'drive') {
     const wasPlaying = playerState.drivePlaying;
-    // Actualizar offset al nuevo tiempo
-    if (wasPlaying) {
-      playerState.drivePlaying   = false;
-      playerState.driveStartTime = null;
-    }
-    playerState.driveOffset = time;
-    if (wasPlaying) {
-      playerState.drivePlaying   = true;
-      playerState.driveStartTime = Date.now();
-    }
-    _renderDriveIframe(playerState.videoId, time);
+    playerState.driveOffset    = Math.max(0, time);
+    playerState.driveStartTime = wasPlaying ? Date.now() : null;
+    _buildDrivePlayer(playerState.videoId, playerState.driveOffset, wasPlaying);
+    _showDrivePauseOverlay(!wasPlaying);
   } else if (playerState.ytPlayer) {
     playerState.ytPlayer.seekTo(time, true);
   }
 }
 
-// Alias para compatibilidad con onHostLeft en room.html
+// Alias para compatibilidad con onHostLeft
 function pauseVideo() { pauseLocal(); }
 
 /* ========================================================
@@ -321,9 +337,7 @@ function getCurrentTime() {
     }
     return playerState.driveOffset;
   }
-  if (playerState.ytPlayer && playerState.ytPlayer.getCurrentTime) {
-    return playerState.ytPlayer.getCurrentTime() || 0;
-  }
+  if (playerState.ytPlayer && playerState.ytPlayer.getCurrentTime) return playerState.ytPlayer.getCurrentTime() || 0;
   return 0;
 }
 
@@ -340,38 +354,35 @@ function isPlaying() {
 }
 
 /* ========================================================
-   HANDLERS REMOTOS — recibidos vía socket
+   HANDLERS REMOTOS — vía socket
    ======================================================== */
 function onRemotePlay({ currentTime }) {
-  playerState.ignoreEvents = true;
+  playerState.ignoreEvents   = true;
+  playerState.driveOffset    = currentTime;
+  playerState.drivePlaying   = true;
+  playerState.driveStartTime = Date.now();
   if (playerState.videoType === 'drive') {
-    playerState.driveOffset    = currentTime;
-    playerState.drivePlaying   = true;
-    playerState.driveStartTime = Date.now();
-    _renderDriveIframe(playerState.videoId, currentTime);
-    // Quitar overlay si existe
-    setTimeout(() => {
-      const overlay = document.getElementById('drive-overlay');
-      if (overlay) overlay.remove();
-    }, 500);
+    _buildDrivePlayer(playerState.videoId, currentTime, true);
+    _showDrivePauseOverlay(false);
   } else {
     seekLocal(currentTime);
-    playLocal();
+    if (playerState.ytPlayer) playerState.ytPlayer.playVideo();
   }
   setTimeout(() => { playerState.ignoreEvents = false; }, 500);
   playerState.onSyncUpdate && playerState.onSyncUpdate(true);
 }
 
 function onRemotePause({ currentTime }) {
-  playerState.ignoreEvents = true;
+  playerState.ignoreEvents   = true;
+  playerState.driveOffset    = currentTime;
+  playerState.drivePlaying   = false;
+  playerState.driveStartTime = null;
   if (playerState.videoType === 'drive') {
-    playerState.driveOffset    = currentTime;
-    playerState.drivePlaying   = false;
-    playerState.driveStartTime = null;
-    _renderDriveIframe(playerState.videoId, currentTime);
+    _buildDrivePlayer(playerState.videoId, currentTime, false);
+    _showDrivePauseOverlay(true);
   } else {
     seekLocal(currentTime);
-    pauseLocal();
+    if (playerState.ytPlayer) playerState.ytPlayer.pauseVideo();
   }
   setTimeout(() => { playerState.ignoreEvents = false; }, 500);
 }
@@ -386,7 +397,6 @@ function applySyncResponse({ currentTime, serverTimestamp }) {
   const lag        = (Date.now() - serverTimestamp) / 1000;
   const targetTime = currentTime + lag + ((socketState.latency || 0) / 1000);
   const diff       = Math.abs(targetTime - getCurrentTime());
-
   if (diff > 3) {
     playerState.ignoreEvents = true;
     seekLocal(targetTime);
@@ -399,7 +409,7 @@ function applySyncResponse({ currentTime, serverTimestamp }) {
 }
 
 /* ========================================================
-   UI
+   UI helpers
    ======================================================== */
 function updateProgressBar(fillEl, timeEl) {
   const dur = getDuration();
@@ -420,7 +430,7 @@ function formatTime(secs) {
 }
 
 function addRipple(btn) {
-  const r     = document.createElement('span');
+  const r = document.createElement('span');
   r.className = 'play-ripple';
   btn.appendChild(r);
   setTimeout(() => r.remove(), 600);
