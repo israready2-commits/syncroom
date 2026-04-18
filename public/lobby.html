@@ -28,11 +28,7 @@
     }
 
     /* Zona del código */
-    .code-section {
-      text-align: center;
-      margin-bottom: 36px;
-    }
-
+    .code-section { text-align: center; margin-bottom: 36px; }
     .code-label {
       font-size: 0.75rem;
       text-transform: uppercase;
@@ -40,7 +36,6 @@
       color: var(--color-text-muted);
       margin-bottom: 8px;
     }
-
     .code-display {
       display: flex;
       align-items: center;
@@ -48,7 +43,6 @@
       gap: 12px;
       flex-wrap: wrap;
     }
-
     .code-value {
       font-family: var(--font-display);
       font-size: 2.5rem;
@@ -56,7 +50,6 @@
       color: var(--color-text);
       letter-spacing: 0.05em;
     }
-
     .code-subtitle {
       font-size: 0.875rem;
       color: var(--color-text-muted);
@@ -72,7 +65,6 @@
       margin-bottom: 12px;
       font-weight: 500;
     }
-
     .participants-list {
       display: flex;
       flex-direction: column;
@@ -80,20 +72,14 @@
       margin-bottom: 32px;
     }
 
-    /* Zona inferior: acciones del host */
-    .lobby-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
+    /* Zona inferior acciones del host */
+    .lobby-actions { display: flex; flex-direction: column; gap: 10px; }
     .guest-waiting {
       text-align: center;
       padding: 20px;
       color: var(--color-text-muted);
       font-size: 0.875rem;
     }
-
     .btn-youtube {
       display: flex;
       align-items: center;
@@ -108,18 +94,13 @@
       cursor: pointer;
       transition: var(--transition);
     }
-
-    .btn-youtube:hover {
-      border-color: #FF0000;
-      color: #FF0000;
-      background: rgba(255, 0, 0, 0.05);
-    }
+    .btn-youtube:hover { border-color: #FF0000; color: #FF0000; background: rgba(255,0,0,0.05); }
 
     /* Modal YouTube */
     .yt-modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.7);
+      background: rgba(0,0,0,0.7);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -127,7 +108,6 @@
       padding: 24px;
       animation: fadeIn 0.2s ease;
     }
-
     .yt-modal {
       background: var(--color-surface);
       border: 1px solid var(--color-border);
@@ -137,20 +117,13 @@
       max-width: 400px;
       animation: scaleIn 0.25s ease;
     }
-
     .yt-modal h3 {
       font-family: var(--font-display);
       font-size: 1.1rem;
       font-weight: 600;
       margin-bottom: 16px;
     }
-
-    .yt-modal-actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 16px;
-    }
-
+    .yt-modal-actions { display: flex; gap: 10px; margin-top: 16px; }
     .spacer { flex: 1; }
 
     /* Tooltip copiado */
@@ -169,12 +142,7 @@
       color: var(--color-text);
       animation: fadeInUp 0.2s ease;
     }
-
-    .copy-btn-wrap {
-      position: relative;
-      display: inline-block;
-    }
-
+    .copy-btn-wrap { position: relative; display: inline-block; }
     .copy-btn-wrap .copy-tooltip.show { display: block; }
   </style>
 </head>
@@ -218,7 +186,7 @@
 
     <div class="spacer"></div>
 
-    <!-- Acciones del host / invitado -->
+    <!-- Acciones del host/invitado -->
     <div class="lobby-actions" id="lobby-actions">
       <!-- Se llenará según si es host o invitado -->
     </div>
@@ -228,14 +196,8 @@
   <!-- Modal YouTube -->
   <div class="yt-modal-backdrop" id="yt-modal" style="display:none;">
     <div class="yt-modal">
-      <h3>🎬 Agregar video de YouTube</h3>
-      <input
-        type="text"
-        class="input-field"
-        id="yt-url-input"
-        placeholder="https://youtube.com/watch?v=..."
-        autocomplete="off"
-      >
+      <h3>Agregar video de YouTube</h3>
+      <input type="text" class="input-field" id="yt-url-input" placeholder="https://youtube.com/watch?v=..." autocomplete="off">
       <div class="yt-modal-actions">
         <button class="btn btn-ghost" onclick="cerrarYTModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="cargarYouTube()">Cargar video</button>
@@ -250,16 +212,23 @@
   <script src="/js/avatar.js"></script>
   <script src="/js/toast.js"></script>
   <script src="/js/socket.js"></script>
-  <!-- FIX: cargar drive.js DESPUÉS de recibir las claves -->
-<script>
-  fetch('/api/config').then(r => r.json()).then(cfg => {
-    window.GOOGLE_CLIENT_ID = cfg.googleClientId;
-    window.GOOGLE_API_KEY = cfg.googleApiKey;
-    const s = document.createElement('script');
-    s.src = '/js/drive.js';
-    document.body.appendChild(s);
-  });
-</script>
+
+  <!-- ✅ FIX: drive.js carga DESPUÉS de recibir las claves, y initGooglePicker va en onload -->
+  <script>
+    fetch('/api/config').then(r => r.json()).then(cfg => {
+      window.GOOGLE_CLIENT_ID = cfg.googleClientId;
+      window.GOOGLE_API_KEY   = cfg.googleApiKey;
+      const s = document.createElement('script');
+      s.src = '/js/drive.js';
+      s.onload = () => {
+        initGooglePicker(({ fileId, fileName }) => {
+          showToast(`🎬 Cargando "${fileName}"...`, 'info');
+          emitVideoChange(fileId, 'drive');
+        });
+      };
+      document.body.appendChild(s);
+    });
+  </script>
 
   <script>
     // --- Leer parámetros de la URL ---
@@ -268,7 +237,6 @@
     const isHost     = urlParams.get('host') === '1';
     const roomCode   = window.location.pathname.split('/')[2];
 
-    // Mostrar código
     document.getElementById('code-display').textContent = roomCode;
     document.title = `SyncRoom — Sala ${roomCode}`;
 
@@ -291,7 +259,7 @@
     } else {
       actionsEl.innerHTML = `
         <div class="guest-waiting">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:0.4">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:0.4;">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
           Esperando que el host elija el video...
@@ -305,31 +273,19 @@
       userName,
       avatarSeed: userName.toLowerCase(),
       isHost,
-
       onRoomState(state) {
-        // Host ya está en la sala
-        if (state.host) {
-          agregarParticipante(state.host.userName, state.host.avatarSeed, true);
-        }
-        if (state.guest) {
-          agregarParticipante(state.guest.userName, state.guest.avatarSeed, false);
-        }
-        // Si ya hay video, ir directo al watch
-        if (state.video) {
-          irAWatch(state.video, state.videoType);
-        }
+        if (state.host)  agregarParticipante(state.host.userName,  state.host.avatarSeed,  true);
+        if (state.guest) agregarParticipante(state.guest.userName, state.guest.avatarSeed, false);
+        if (state.video) irAWatch(state.video, state.videoType);
       },
-
       onUserJoined(data) {
         agregarParticipante(data.userName, data.avatarSeed, data.isHost);
         showToast(`🌟 ${data.userName} se unió a la sala`, 'success');
       },
-
       onUserLeft(data) {
         quitarParticipante(data.userName);
         showToast(`${data.userName} salió de la sala`, 'info');
       },
-
       onVideoChange(data) {
         irAWatch(data.videoId, data.videoType);
       }
@@ -337,7 +293,7 @@
 
     // --- Participantes ---
     function agregarParticipante(name, avatarSeed, esHost) {
-      if (participantes[name]) return; // ya existe
+      if (participantes[name]) return;
       participantes[name] = { name, avatarSeed, esHost };
       renderParticipantes();
     }
@@ -350,7 +306,6 @@
     function renderParticipantes() {
       const lista = document.getElementById('participants-list');
       lista.innerHTML = '';
-
       Object.values(participantes).forEach(p => {
         const row = document.createElement('div');
         row.className = 'participant-row';
@@ -360,20 +315,19 @@
           </div>
           <div class="participant-info">
             <div class="participant-name">${p.name}</div>
+            <div>${p.esHost ? '<span class="badge badge-host">HOST</span>' : ''}</div>
           </div>
-          ${p.esHost ? '<span class="badge badge-host">HOST</span>' : ''}
           <div class="online-dot"></div>
         `;
         lista.appendChild(row);
       });
 
-      // Mostrar "esperando" si solo hay 1 persona
       if (Object.keys(participantes).length < 2) {
         const waiting = document.createElement('div');
         waiting.className = 'waiting-row';
         waiting.innerHTML = `
           <div class="avatar avatar-md" style="background:var(--color-surface);border-style:dashed;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3;">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/>
             </svg>
           </div>
@@ -383,7 +337,6 @@
       }
     }
 
-    // Inicializar con el usuario actual
     agregarParticipante(userName, userName.toLowerCase(), isHost);
 
     // --- Copiar código ---
@@ -396,38 +349,31 @@
       });
     }
 
-    // --- Google Drive Picker ---
-    initGooglePicker(({ fileId, fileName }) => {
-      showToast(`🎬 Cargando "${fileName}"...`, 'info');
-      emitVideoChange(fileId, 'drive');
-    });
-
+    // --- Drive Picker ---
     function abrirDrivePicker() {
-      openDrivePicker();
+      if (typeof openDrivePicker === 'function') {
+        openDrivePicker();
+      } else {
+        showToast('⏳ Cargando Drive, intenta de nuevo...', 'info');
+      }
     }
 
     // --- YouTube Modal ---
-    function abrirYTModal() {
-      document.getElementById('yt-modal').style.display = 'flex';
-    }
-
+    function abrirYTModal()  { document.getElementById('yt-modal').style.display = 'flex'; }
     function cerrarYTModal() {
       document.getElementById('yt-modal').style.display = 'none';
       document.getElementById('yt-url-input').value = '';
     }
 
     function cargarYouTube() {
-      const url = document.getElementById('yt-url-input').value.trim();
+      const url     = document.getElementById('yt-url-input').value.trim();
       const videoId = parseYouTubeId(url);
-      if (!videoId) {
-        showToast('URL de YouTube inválida', 'error');
-        return;
-      }
+      if (!videoId) { showToast('URL de YouTube inválida', 'error'); return; }
       cerrarYTModal();
       emitVideoChange(videoId, 'youtube');
     }
 
-    // También manejar emitVideoChange desde el lobby
+    // emitVideoChange desde el lobby
     function emitVideoChange(videoId, videoType) {
       socketState.socket && socketState.socket.emit('video-change', { videoId, videoType });
     }
@@ -438,8 +384,8 @@
       window.location.href = `/sala/${roomCode}/watch${params}`;
     }
 
-    // ESC cierra el modal de YouTube
-    document.addEventListener('keydown', (e) => {
+    // ESC cierra modal YouTube
+    document.addEventListener('keydown', e => {
       if (e.key === 'Escape') cerrarYTModal();
     });
   </script>
