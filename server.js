@@ -14,11 +14,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const MAX_GUESTS = 3; // máximo 3 invitados + 1 host = 4 personas
+
 // --- Estado en memoria ---
-// salas[codigo] = { host, guests: [], video: null, videoType: null, playing: false, currentTime: 0, lastUpdate: Date }
 const salas = {};
 
-// Palabras para generar códigos de sala
 const PALABRAS = ['LUNA', 'NOCHE', 'ASTRO', 'NEBULA', 'NOVA', 'COSMO', 'ORION', 'LYRA', 'VEGA', 'SIRIO', 'ATLAS', 'EDEN', 'ZENIT', 'ALPHA', 'BETA'];
 
 function generarCodigo() {
@@ -47,7 +47,7 @@ app.post('/api/sala/crear', (req, res) => {
   salas[codigo] = {
     codigo,
     host: { userName, avatarSeed, socketId: null },
-    guest: null,
+    guests: [],
     video: null,
     videoType: null,
     playing: false,
@@ -62,8 +62,8 @@ app.post('/api/sala/unirse', (req, res) => {
   const { codigo, userName } = req.body;
   const sala = salas[codigo];
   if (!sala) return res.status(404).json({ error: 'Sala no encontrada' });
-  if (sala.guest && sala.guest.userName) return res.status(403).json({ error: 'La sala está llena' });
   if (!userName) return res.status(400).json({ error: 'Nombre requerido' });
+  if (sala.guests.length >= MAX_GUESTS) return res.status(403).json({ error: 'La sala está llena (máximo 4 personas)' });
   res.json({ ok: true, isHost: false });
 });
 
@@ -74,7 +74,8 @@ app.get('/api/sala/:codigo', (req, res) => {
   res.json({
     codigo: sala.codigo,
     hostName: sala.host.userName,
-    hasGuest: !!sala.guest,
+    guestCount: sala.guests.length,
+    isFull: sala.guests.length >= MAX_GUESTS,
     video: sala.video,
     videoType: sala.videoType
   });
@@ -98,34 +99,39 @@ io.on('connection', (socket) => {
       sala.host.userName = userName;
       sala.host.avatarSeed = avatarSeed;
     } else {
-      if (sala.guest && sala.guest.socketId && sala.guest.socketId !== socket.id) {
-        socket.emit('sala-llena', 'Esta sala ya tiene dos personas');
-        return;
+      // Verificar si ya está reconectando (mismo nombre)
+      const yaExiste = sala.guests.find(g => g.userName === userName);
+      if (!yaExiste) {
+        if (sala.guests.length >= MAX_GUESTS) {
+          socket.emit('sala-llena', 'Esta sala ya está llena (máximo 4 personas)');
+          return;
+        }
+        sala.guests.push({ userName, avatarSeed, socketId: socket.id });
+      } else {
+        // Actualizar socketId si reconecta
+        yaExiste.socketId = socket.id;
       }
-      sala.guest = { userName, avatarSeed, socketId: socket.id };
     }
 
-    // Enviar estado actual de la sala al nuevo participante
+    // Enviar estado actual al nuevo participante
     socket.emit('room-state', {
       video: sala.video,
       videoType: sala.videoType,
       playing: sala.playing,
       currentTime: sala.currentTime,
       host: { userName: sala.host.userName, avatarSeed: sala.host.avatarSeed },
-      guest: sala.guest ? { userName: sala.guest.userName, avatarSeed: sala.guest.avatarSeed } : null
+      guests: sala.guests.map(g => ({ userName: g.userName, avatarSeed: g.avatarSeed }))
     });
 
-    // Notificar a todos en la sala que alguien se unió
+    // Notificar a todos
     io.to(roomCode).emit('user-joined', { userName, avatarSeed, isHost });
-
-    // Mensaje de sistema en chat
     io.to(roomCode).emit('system-message', `${userName} se unió a la sala`);
   });
 
-  // Ping para medir latencia
+  // Ping
   socket.on('ping-check', () => socket.emit('pong-check'));
 
-  // --- Controles de video (solo host puede emitir estos) ---
+  // --- Controles de video ---
   socket.on('video-play', ({ currentTime }) => {
     const sala = salas[socket.roomCode];
     if (!sala) return;
@@ -161,7 +167,7 @@ io.on('connection', (socket) => {
     io.to(socket.roomCode).emit('video-change', { videoId, videoType });
   });
 
-  // Solicitar sincronización
+  // Sincronización
   socket.on('sync-request', ({ currentTime }) => {
     const sala = salas[socket.roomCode];
     if (!sala) return;
@@ -188,25 +194,22 @@ io.on('connection', (socket) => {
     if (!sala) return;
 
     if (socket.isHost) {
-      // Host se desconecta
       io.to(socket.roomCode).emit('host-left', { userName: socket.userName });
       io.to(socket.roomCode).emit('system-message', `${socket.userName} (host) se desconectó`);
-      // Limpiar sala después de 5 minutos si nadie reconecta
       setTimeout(() => {
         if (salas[socket.roomCode] && salas[socket.roomCode].host.socketId === socket.id) {
           delete salas[socket.roomCode];
         }
       }, 5 * 60 * 1000);
     } else {
-      // Invitado se desconecta
-      sala.guest = null;
+      sala.guests = sala.guests.filter(g => g.socketId !== socket.id);
       io.to(socket.roomCode).emit('user-left', { userName: socket.userName });
       io.to(socket.roomCode).emit('system-message', `${socket.userName} salió de la sala`);
     }
   });
 });
 
-// --- API Config (para pasar claves al frontend de forma segura) ---
+// --- API Config ---
 app.get('/api/config', (req, res) => {
   res.json({
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',

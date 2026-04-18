@@ -10,12 +10,7 @@
   <link rel="stylesheet" href="/css/animations.css">
   <style>
     html, body { height: 100%; overflow: hidden; }
-
-
     body { display: flex; flex-direction: column; }
-
-
-    /* ======= HEADER ======= */
     .watch-header {
       display: flex;
       align-items: center;
@@ -26,16 +21,12 @@
       flex-shrink: 0;
       z-index: 10;
     }
-
-
     .header-code {
       display: flex;
       align-items: center;
       gap: 8px;
       margin: 0 auto;
     }
-
-
     .header-code-val {
       font-family: var(--font-display);
       font-size: 0.875rem;
@@ -43,34 +34,15 @@
       letter-spacing: 0.05em;
       color: var(--color-text-muted);
     }
-
-
-    .header-avatars {
-      display: flex;
-      gap: -4px;
-    }
-
-
+    .header-avatars { display: flex; gap: -4px; }
     .header-avatars .avatar {
       width: 28px;
       height: 28px;
       border: 2px solid var(--color-surface);
       margin-left: -4px;
     }
-
-
     .header-avatars .avatar:first-child { margin-left: 0; }
-
-
-    /* ======= MAIN AREA ======= */
-    .watch-main {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
-
-
-    /* ======= PLAYER ZONE ======= */
+    .watch-main { display: flex; flex: 1; overflow: hidden; }
     .player-zone {
       flex: 1;
       display: flex;
@@ -78,8 +50,6 @@
       overflow: hidden;
       position: relative;
     }
-
-
     #player-wrapper {
       flex: 1;
       background: #000;
@@ -89,14 +59,7 @@
       align-items: center;
       justify-content: center;
     }
-
-
-    #player-inner {
-      width: 100%;
-      height: 100%;
-    }
-
-
+    #player-inner { width: 100%; height: 100%; }
     #player-loading {
       position: absolute;
       inset: 0;
@@ -109,17 +72,12 @@
       font-size: 0.875rem;
       z-index: 5;
     }
-
-
     .sync-badge-container {
       position: absolute;
       top: 12px;
       right: 12px;
       z-index: 20;
     }
-
-
-    /* ======= SIDE PANEL ======= */
     .side-panel {
       width: 280px;
       flex-shrink: 0;
@@ -129,14 +87,7 @@
       flex-direction: column;
       overflow: hidden;
     }
-
-
-    .side-tabs {
-      display: flex;
-      border-bottom: 1px solid var(--color-border);
-    }
-
-
+    .side-tabs { display: flex; border-bottom: 1px solid var(--color-border); }
     .side-tab {
       flex: 1;
       padding: 12px;
@@ -148,28 +99,9 @@
       transition: var(--transition);
       border-bottom: 2px solid transparent;
     }
-
-
-    .side-tab.active {
-      color: var(--color-primary);
-      border-bottom-color: var(--color-primary);
-    }
-
-
-    .tab-content {
-      flex: 1;
-      overflow: hidden;
-      display: none;
-      flex-direction: column;
-    }
-
-
-    .tab-content.active {
-      display: flex;
-    }
-
-
-    /* ======= QUEUE ======= */
+    .side-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+    .tab-content { flex: 1; overflow: hidden; display: none; flex-direction: column; }
+    .tab-content.active { display: flex; }
     .queue-list {
       flex: 1;
       overflow-y: auto;
@@ -178,16 +110,12 @@
       flex-direction: column;
       gap: 4px;
     }
-
-
     .queue-empty {
       text-align: center;
       color: var(--color-text-muted);
       font-size: 0.8125rem;
       padding: 32px 16px;
     }
-
-
     .queue-add-btn {
       margin: 12px;
       display: flex;
@@ -202,22 +130,12 @@
       cursor: pointer;
       transition: var(--transition);
     }
-
-
     .queue-add-btn:hover {
       border-color: var(--color-primary);
       color: var(--color-primary);
       background: var(--color-primary-deep);
     }
-
-
-    /* ======= CHAT PANEL ======= */
-    #tab-chat {
-      background: var(--color-surface);
-    }
-
-
-    /* ======= BOTTOM CHAT (mobile) ======= */
+    #tab-chat { background: var(--color-surface); }
     .bottom-chat {
       display: none;
       flex-direction: column;
@@ -225,53 +143,18 @@
       border-top: 1px solid var(--color-border);
       background: var(--color-surface);
     }
-
-
-    /* ======= MOBILE ======= */
     @media (max-width: 768px) {
       .watch-main { flex-direction: column; }
-
-
       .side-panel { display: none; }
-
-
       .player-zone { flex: none; height: 56vw; min-height: 200px; }
-
-
       .bottom-chat { display: flex; }
-
-
       .watch-header { padding: 10px 16px; }
-
-
       .header-code-val { font-size: 0.8125rem; }
     }
-
-
-    /* ======= FULLSCREEN ======= */
-    :fullscreen #player-wrapper,
-    :-webkit-full-screen #player-wrapper {
-      width: 100vw;
-      height: 100vh;
-    }
-
-
-    :fullscreen .watch-header,
-    :-webkit-full-screen .watch-header,
-    :fullscreen .side-panel,
-    :-webkit-full-screen .side-panel {
-      display: none;
-    }
-
-
-    :fullscreen .player-zone,
-    :-webkit-full-screen .player-zone {
-      width: 100vw;
-      height: 100vh;
-    }
-
-
-    /* Chat flotante en fullscreen */
+    :fullscreen #player-wrapper, :-webkit-full-screen #player-wrapper { width: 100vw; height: 100vh; }
+    :fullscreen .watch-header, :-webkit-full-screen .watch-header,
+    :fullscreen .side-panel, :-webkit-full-screen .side-panel { display: none; }
+    :fullscreen .player-zone, :-webkit-full-screen .player-zone { width: 100vw; height: 100vh; }
     .fs-chat {
       display: none;
       position: fixed;
@@ -286,12 +169,8 @@
       flex-direction: column;
       z-index: 50;
     }
-
-
     :fullscreen .fs-chat.visible { display: flex; }
     :-webkit-full-screen .fs-chat.visible { display: flex; }
-
-
     .fs-chat-toggle {
       display: none;
       position: fixed;
@@ -306,35 +185,18 @@
       z-index: 51;
       cursor: pointer;
     }
-
-
     :fullscreen .fs-chat-toggle { display: flex; }
     :-webkit-full-screen .fs-chat-toggle { display: flex; }
-
-
     :fullscreen .fs-chat.visible + .fs-chat-toggle,
     :-webkit-full-screen .fs-chat.visible + .fs-chat-toggle { display: none; }
-
-
-    /* Player controls custom */
-    #player-controls {
-      z-index: 10;
-    }
-
-
+    #player-controls { z-index: 10; }
     .ctrl-time { color: rgba(255,255,255,0.6); font-size: 0.8125rem; margin-left: auto; }
-
-
-    /* Host indicator cuando no es host */
     .host-ctrl-note {
       text-align: center;
       font-size: 0.75rem;
       color: var(--color-text-muted);
       padding: 8px;
     }
-
-
-    /* Agregar video YouTube desde sala */
     .add-yt-modal {
       position: fixed;
       inset: 0;
@@ -345,8 +207,6 @@
       z-index: 200;
       padding: 24px;
     }
-
-
     .add-yt-box {
       background: var(--color-surface);
       border: 1px solid var(--color-border);
@@ -356,8 +216,6 @@
       max-width: 400px;
       animation: scaleIn 0.2s ease;
     }
-
-
     .participants-header {
       display: flex;
       align-items: center;
@@ -365,8 +223,6 @@
       padding: 10px 16px 6px;
       border-bottom: 1px solid var(--color-border);
     }
-
-
     .participant-mini {
       display: flex;
       align-items: center;
@@ -378,8 +234,6 @@
 </head>
 <body>
 
-
-  <!-- HEADER -->
   <header class="watch-header">
     <a href="/" class="logo">
       <div class="logo-icon" style="width:26px;height:26px;border-radius:6px;">
@@ -389,115 +243,65 @@
       </div>
       <span class="logo-text" style="font-size:1rem;">Sync<span>Room</span></span>
     </a>
-
-
     <div class="header-code">
       <span class="header-code-val" id="header-code">---</span>
       <button class="copy-btn" style="padding:5px 10px;font-size:0.75rem;" onclick="copiarCodigo()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
       </button>
     </div>
-
-
-    <div class="header-avatars" id="header-avatars">
-      <!-- avatares de participantes -->
-    </div>
+    <div class="header-avatars" id="header-avatars"></div>
   </header>
 
-
-  <!-- MAIN -->
   <div class="watch-main" id="watch-container">
 
-
-    <!-- PLAYER ZONE -->
     <div class="player-zone">
       <div id="player-wrapper">
-
-
-        <!-- Video -->
         <div id="player-inner" style="width:100%;height:100%;"></div>
-
-
-        <!-- Loading -->
         <div id="player-loading">
           <div class="spinner"></div>
           <span>Cargando video...</span>
         </div>
-
-
-        <!-- Sync badge -->
         <div class="sync-badge-container">
           <div class="sync-badge syncing" id="sync-badge">
             <div class="sync-dot"></div>
             <span id="sync-text">Sincronizando</span>
           </div>
         </div>
-
-
-        <!-- Controles del player -->
         <div class="player-controls" id="player-controls">
-
-
-          <!-- Barra de progreso -->
           <div class="progress-bar" id="progress-bar">
             <div class="progress-fill" id="progress-fill" style="width:0%"></div>
           </div>
-
-
-          <!-- Fila de controles -->
           <div class="controls-row">
             <button class="ctrl-btn" id="ctrl-rewind" title="Retroceder 10s">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 3C7.81 3 4.37 6.35 3.15 10.5H1l4 4 4-4H6.31C7.43 6.55 9.73 5 12.5 5A7.5 7.5 0 1 1 5 12.5H3A9.5 9.5 0 1 0 12.5 3zm-1 5v5.25l4.5 2.67-.75 1.23L10 14V8h1.5z"/></svg>
             </button>
-
-
             <button class="ctrl-btn ctrl-btn-play" id="ctrl-play">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             </button>
-
-
             <button class="ctrl-btn" id="ctrl-forward" title="Avanzar 10s">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11.5 3A9.5 9.5 0 0 0 2 12.5H0l4 4 4-4H5.5A7.5 7.5 0 1 1 13 19.94V21.97A9.5 9.5 0 1 0 11.5 3zm.5 5h1.5v5.25l3.5 2.08-.75 1.23L12 14V8z"/></svg>
             </button>
-
-
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:rgba(255,255,255,0.5);flex-shrink:0;">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
             </svg>
             <input type="range" class="volume-slider" id="vol-slider" min="0" max="100" value="80">
-
-
             <div class="ctrl-time" id="time-display">00:00 / 00:00</div>
-
-
             <button class="ctrl-btn" id="ctrl-fs" title="Pantalla completa">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
             </button>
           </div>
-
-
           <div id="host-note" style="display:none;" class="host-ctrl-note">
             Solo el host puede controlar el video
           </div>
         </div>
-
-
       </div>
     </div>
 
-
-    <!-- PANEL LATERAL -->
     <aside class="side-panel">
-
-
-      <!-- Tabs -->
       <div class="side-tabs">
         <div class="side-tab active" id="tab-queue-btn" onclick="showTab('queue')">Cola</div>
         <div class="side-tab" id="tab-chat-btn" onclick="showTab('chat')">Chat</div>
       </div>
-
-
-      <!-- Tab: Cola de videos -->
       <div class="tab-content active" id="tab-queue">
         <div class="participants-header">
           <div id="side-participants" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"></div>
@@ -505,13 +309,8 @@
         <div class="queue-list" id="queue-list">
           <div class="queue-empty">Sin videos en cola</div>
         </div>
-        <div id="queue-add-area">
-          <!-- Botón agregar solo para host -->
-        </div>
+        <div id="queue-add-area"></div>
       </div>
-
-
-      <!-- Tab: Chat -->
       <div class="tab-content" id="tab-chat" style="background:var(--color-surface);">
         <div class="chat-messages" id="chat-messages"></div>
         <div class="chat-input-container">
@@ -521,12 +320,8 @@
           </button>
         </div>
       </div>
-
-
     </aside>
 
-
-    <!-- CHAT MOBILE (bottom) -->
     <div class="bottom-chat" id="bottom-chat">
       <div class="chat-messages" id="chat-messages-mobile"></div>
       <div class="chat-input-container">
@@ -537,11 +332,8 @@
       </div>
     </div>
 
-
   </div>
 
-
-  <!-- Chat flotante en fullscreen -->
   <div class="fs-chat" id="fs-chat">
     <div class="chat-messages" id="chat-messages-fs" style="flex:1;overflow-y:auto;padding:12px;"></div>
     <div class="chat-input-container" style="padding:8px 12px;">
@@ -552,13 +344,10 @@
     </div>
   </div>
 
-
   <div class="fs-chat-toggle" id="fs-chat-toggle" onclick="toggleFsChat()">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
   </div>
 
-
-  <!-- Modal agregar YouTube desde sala -->
   <div class="add-yt-modal" id="add-yt-modal" style="display:none;">
     <div class="add-yt-box">
       <h3 style="font-family:var(--font-display);font-size:1.1rem;margin-bottom:16px;">Agregar video de YouTube</h3>
@@ -570,10 +359,7 @@
     </div>
   </div>
 
-
-  <!-- Toasts -->
   <div id="toast-container"></div>
-
 
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="/js/avatar.js"></script>
@@ -582,7 +368,6 @@
   <script src="/js/player.js"></script>
   <script src="/js/chat.js"></script>
 
-  <!-- ✅ FIX: drive.js se carga DESPUÉS de recibir las claves -->
   <script>
     fetch('/api/config').then(r => r.json()).then(cfg => {
       window.GOOGLE_CLIENT_ID = cfg.googleClientId;
@@ -594,14 +379,12 @@
   </script>
 
   <script>
-    // --- Parámetros de URL ---
     const params   = new URLSearchParams(window.location.search);
     const userName = decodeURIComponent(params.get('u') || 'Anónimo');
     const isHost   = params.get('host') === '1';
     const roomCode = window.location.pathname.split('/')[2];
     const initVid  = params.get('vid');
     const initType = params.get('vtype') || 'drive';
-
 
     document.getElementById('header-code').textContent = roomCode;
     document.title = `SyncRoom — ${roomCode}`;
@@ -755,11 +538,14 @@
       }
     }
 
+    // ✅ CAMBIO: usa state.guests (array) en lugar de state.guest
     initSocket({
       roomCode, userName, avatarSeed: userName.toLowerCase(), isHost,
       onRoomState(state) {
         if (state.host) agregarParticipante(state.host.userName, state.host.avatarSeed, true);
-        if (state.guest) agregarParticipante(state.guest.userName, state.guest.avatarSeed, false);
+        if (state.guests) {
+          state.guests.forEach(g => agregarParticipante(g.userName, g.avatarSeed, false));
+        }
         if (state.video && !initVid) {
           cargarVideoDesdeSocket(state.video, state.videoType);
           if (state.playing) {
