@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncRoom — Sala de espera</title>
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <style>
+    .lobby-layout {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 24px;
+      animation: fadeInUp 0.4s ease;
+    }
+
+    /* Header */
+    .lobby-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 40px;
+    }
+
+    /* Zona del código */
+    .code-section {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .code-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--color-text-muted);
+      margin-bottom: 8px;
+    }
+
+    .code-display {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .code-value {
+      font-family: var(--font-display);
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--color-text);
+      letter-spacing: 0.05em;
+    }
+
+    .code-subtitle {
+      font-size: 0.875rem;
+      color: var(--color-text-muted);
+      margin-top: 8px;
+    }
+
+    /* Sección participantes */
+    .section-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-text-muted);
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    .participants-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+
+    /* Zona inferior: acciones del host */
+    .lobby-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .guest-waiting {
+      text-align: center;
+      padding: 20px;
+      color: var(--color-text-muted);
+      font-size: 0.875rem;
+    }
+
+    .btn-youtube {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 20px;
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      color: var(--color-text-muted);
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn-youtube:hover {
+      border-color: #FF0000;
+      color: #FF0000;
+      background: rgba(255, 0, 0, 0.05);
+    }
+
+    /* Modal YouTube */
+    .yt-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 24px;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .yt-modal {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      width: 100%;
+      max-width: 400px;
+      animation: scaleIn 0.25s ease;
+    }
+
+    .yt-modal h3 {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .yt-modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .spacer { flex: 1; }
+
+    /* Tooltip copiado */
+    .copy-tooltip {
+      display: none;
+      position: absolute;
+      top: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--color-surface-2);
+      border: 1px solid var(--color-border);
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      white-space: nowrap;
+      color: var(--color-text);
+      animation: fadeInUp 0.2s ease;
+    }
+
+    .copy-btn-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    .copy-btn-wrap .copy-tooltip.show { display: block; }
+  </style>
+</head>
+<body>
+
+  <div class="lobby-layout">
+
+    <!-- Header -->
+    <div class="lobby-header">
+      <a href="/" class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </div>
+        <span class="logo-text">Sync<span>Room</span></span>
+      </a>
+    </div>
+
+    <!-- Código de sala -->
+    <div class="code-section">
+      <div class="code-label">Código de sala</div>
+      <div class="code-display">
+        <span class="code-value" id="code-display">---</span>
+        <div class="copy-btn-wrap">
+          <button class="copy-btn" id="btn-copy" onclick="copiarCodigo()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            Copiar
+          </button>
+          <div class="copy-tooltip" id="copy-tooltip">¡Copiado!</div>
+        </div>
+      </div>
+      <div class="code-subtitle">Comparte este código con tu amiga</div>
+    </div>
+
+    <!-- Participantes -->
+    <div class="section-label">En la sala</div>
+    <div class="participants-list" id="participants-list">
+      <!-- Se llenará dinámicamente -->
+    </div>
+
+    <div class="spacer"></div>
+
+    <!-- Acciones del host / invitado -->
+    <div class="lobby-actions" id="lobby-actions">
+      <!-- Se llenará según si es host o invitado -->
+    </div>
+
+  </div>
+
+  <!-- Modal YouTube -->
+  <div class="yt-modal-backdrop" id="yt-modal" style="display:none;">
+    <div class="yt-modal">
+      <h3>🎬 Agregar video de YouTube</h3>
+      <input
+        type="text"
+        class="input-field"
+        id="yt-url-input"
+        placeholder="https://youtube.com/watch?v=..."
+        autocomplete="off"
+      >
+      <div class="yt-modal-actions">
+        <button class="btn btn-ghost" onclick="cerrarYTModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="cargarYouTube()">Cargar video</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="/js/avatar.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="/js/socket.js"></script>
+  <script src="/js/drive.js"></script>
+  <script>
+    // --- Leer parámetros de la URL ---
+    const urlParams  = new URLSearchParams(window.location.search);
+    const userName   = decodeURIComponent(urlParams.get('u') || 'Anónimo');
+    const isHost     = urlParams.get('host') === '1';
+    const roomCode   = window.location.pathname.split('/')[2];
+
+    // Mostrar código
+    document.getElementById('code-display').textContent = roomCode;
+    document.title = `SyncRoom — Sala ${roomCode}`;
+
+    // Lista de participantes en memoria
+    const participantes = {};
+
+    // Renderizar acciones según rol
+    const actionsEl = document.getElementById('lobby-actions');
+    if (isHost) {
+      actionsEl.innerHTML = `
+        <button class="btn btn-primary btn-full" id="btn-drive" onclick="abrirDrivePicker()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14.28 2.5L19.78 12l-5.5 9.5H9.72L4.22 12l5.5-9.5h4.56zM12 1L5 13l3.5 6h7L19 13 12 1z"/></svg>
+          Elegir video de Drive
+        </button>
+        <button class="btn-youtube" onclick="abrirYTModal()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+          + YouTube (opcional)
+        </button>
+      `;
+    } else {
+      actionsEl.innerHTML = `
+        <div class="guest-waiting">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;display:block;opacity:0.4">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Esperando que el host elija el video...
+        </div>
+      `;
+    }
+
+    // --- Socket.IO ---
+    initSocket({
+      roomCode,
+      userName,
+      avatarSeed: userName.toLowerCase(),
+      isHost,
+
+      onRoomState(state) {
+        // Host ya está en la sala
+        if (state.host) {
+          agregarParticipante(state.host.userName, state.host.avatarSeed, true);
+        }
+        if (state.guest) {
+          agregarParticipante(state.guest.userName, state.guest.avatarSeed, false);
+        }
+        // Si ya hay video, ir directo al watch
+        if (state.video) {
+          irAWatch(state.video, state.videoType);
+        }
+      },
+
+      onUserJoined(data) {
+        agregarParticipante(data.userName, data.avatarSeed, data.isHost);
+        showToast(`🌟 ${data.userName} se unió a la sala`, 'success');
+      },
+
+      onUserLeft(data) {
+        quitarParticipante(data.userName);
+        showToast(`${data.userName} salió de la sala`, 'info');
+      },
+
+      onVideoChange(data) {
+        irAWatch(data.videoId, data.videoType);
+      }
+    });
+
+    // --- Participantes ---
+    function agregarParticipante(name, avatarSeed, esHost) {
+      if (participantes[name]) return; // ya existe
+      participantes[name] = { name, avatarSeed, esHost };
+      renderParticipantes();
+    }
+
+    function quitarParticipante(name) {
+      delete participantes[name];
+      renderParticipantes();
+    }
+
+    function renderParticipantes() {
+      const lista = document.getElementById('participants-list');
+      lista.innerHTML = '';
+
+      Object.values(participantes).forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'participant-row';
+        row.innerHTML = `
+          <div class="avatar avatar-md">
+            <img src="${getAvatarUrl(p.name)}" alt="${p.name}" width="48" height="48">
+          </div>
+          <div class="participant-info">
+            <div class="participant-name">${p.name}</div>
+          </div>
+          ${p.esHost ? '<span class="badge badge-host">HOST</span>' : ''}
+          <div class="online-dot"></div>
+        `;
+        lista.appendChild(row);
+      });
+
+      // Mostrar "esperando" si solo hay 1 persona
+      if (Object.keys(participantes).length < 2) {
+        const waiting = document.createElement('div');
+        waiting.className = 'waiting-row';
+        waiting.innerHTML = `
+          <div class="avatar avatar-md" style="background:var(--color-surface);border-style:dashed;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/>
+            </svg>
+          </div>
+          <span>Esperando a tu amiga <span class="typing-dots"><span></span><span></span><span></span></span></span>
+        `;
+        lista.appendChild(waiting);
+      }
+    }
+
+    // Inicializar con el usuario actual
+    agregarParticipante(userName, userName.toLowerCase(), isHost);
+
+    // --- Copiar código ---
+    function copiarCodigo() {
+      navigator.clipboard.writeText(roomCode).then(() => {
+        const tooltip = document.getElementById('copy-tooltip');
+        tooltip.classList.add('show');
+        setTimeout(() => tooltip.classList.remove('show'), 2000);
+        showToast('📋 Código copiado', 'info');
+      });
+    }
+
+    // --- Google Drive Picker ---
+    initGooglePicker(({ fileId, fileName }) => {
+      showToast(`🎬 Cargando "${fileName}"...`, 'info');
+      emitVideoChange(fileId, 'drive');
+    });
+
+    function abrirDrivePicker() {
+      openDrivePicker();
+    }
+
+    // --- YouTube Modal ---
+    function abrirYTModal() {
+      document.getElementById('yt-modal').style.display = 'flex';
+    }
+
+    function cerrarYTModal() {
+      document.getElementById('yt-modal').style.display = 'none';
+      document.getElementById('yt-url-input').value = '';
+    }
+
+    function cargarYouTube() {
+      const url = document.getElementById('yt-url-input').value.trim();
+      const videoId = parseYouTubeId(url);
+      if (!videoId) {
+        showToast('URL de YouTube inválida', 'error');
+        return;
+      }
+      cerrarYTModal();
+      emitVideoChange(videoId, 'youtube');
+    }
+
+    // También manejar emitVideoChange desde el lobby
+    function emitVideoChange(videoId, videoType) {
+      socketState.socket && socketState.socket.emit('video-change', { videoId, videoType });
+    }
+
+    // --- Ir a la sala principal ---
+    function irAWatch(videoId, videoType) {
+      const params = `?u=${encodeURIComponent(userName)}&host=${isHost ? 1 : 0}&vid=${videoId}&vtype=${videoType}`;
+      window.location.href = `/sala/${roomCode}/watch${params}`;
+    }
+
+    // ESC cierra el modal de YouTube
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') cerrarYTModal();
+    });
+  </script>
+</body>
+</html>

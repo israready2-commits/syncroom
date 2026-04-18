@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncRoom — Ver juntos</title>
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <style>
+    .home-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .home-card {
+      width: 100%;
+      max-width: 400px;
+      animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .home-logo {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .home-logo .logo {
+      display: inline-flex;
+      margin-bottom: 8px;
+    }
+
+    .home-logo p {
+      font-size: 0.875rem;
+      color: var(--color-text-muted);
+    }
+
+    .avatar-preview-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      min-height: 106px;
+      transition: var(--transition);
+    }
+
+    .avatar-preview-wrap.hidden { opacity: 0; pointer-events: none; }
+
+    .avatar-preview-img {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 2px solid var(--color-primary);
+      overflow: hidden;
+      background: var(--color-surface-2);
+      animation: scaleIn 0.25s ease;
+    }
+
+    .avatar-preview-img img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .avatar-preview-label {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--color-text);
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .code-input-wrap {
+      overflow: hidden;
+      max-height: 0;
+      opacity: 0;
+      transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+    }
+
+    .code-input-wrap.open {
+      max-height: 60px;
+      opacity: 1;
+    }
+
+    .btns-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 4px 0;
+      color: var(--color-text-muted);
+      font-size: 0.8125rem;
+    }
+
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--color-border);
+    }
+
+    .home-footer {
+      text-align: center;
+      margin-top: 28px;
+      font-size: 0.8125rem;
+      color: var(--color-text-muted);
+    }
+
+    .home-footer a {
+      color: var(--color-primary);
+    }
+
+    /* Decoración de fondo */
+    .bg-deco {
+      position: fixed;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .bg-deco-circle {
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      border: 1px solid rgba(124, 92, 191, 0.08);
+    }
+
+    .bg-deco-1 { top: -100px; right: -100px; }
+    .bg-deco-2 { bottom: -150px; left: -150px; width: 500px; height: 500px; }
+  </style>
+</head>
+<body>
+
+  <!-- Decoración de fondo -->
+  <div class="bg-deco bg-deco-1"><div class="bg-deco-circle"></div></div>
+  <div class="bg-deco bg-deco-2"><div class="bg-deco-circle"></div></div>
+
+  <div class="home-container">
+    <div class="home-card">
+
+      <!-- Logo -->
+      <div class="home-logo">
+        <a href="/" class="logo">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </div>
+          <span class="logo-text">Sync<span>Room</span></span>
+        </a>
+        <p>Ver videos juntos, en sincronía perfecta</p>
+      </div>
+
+      <!-- Preview del avatar -->
+      <div class="avatar-preview-wrap hidden" id="avatar-preview">
+        <div class="avatar-preview-img">
+          <img id="avatar-img" src="" alt="Tu avatar">
+        </div>
+        <span class="avatar-preview-label" id="avatar-name"></span>
+      </div>
+
+      <!-- Inputs -->
+      <div class="input-group">
+        <input
+          type="text"
+          id="input-name"
+          class="input-field"
+          placeholder="¿Cómo te llamas?"
+          maxlength="24"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+        >
+
+        <div class="code-input-wrap" id="code-wrap">
+          <input
+            type="text"
+            id="input-code"
+            class="input-field"
+            placeholder="Código de sala (ej: LUNA-47)"
+            maxlength="12"
+            autocomplete="off"
+            style="text-transform:uppercase; letter-spacing:0.05em;"
+          >
+        </div>
+      </div>
+
+      <!-- Botones -->
+      <div class="btns-group">
+        <button class="btn btn-primary btn-full" id="btn-crear">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+          Crear sala
+        </button>
+
+        <div class="divider">o</div>
+
+        <button class="btn btn-outline btn-full" id="btn-unirse">
+          Unirme con código
+        </button>
+      </div>
+
+      <!-- Footer -->
+      <div class="home-footer">
+        Sin cuenta necesaria · Máximo 2 personas por sala
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <script src="/js/avatar.js"></script>
+  <script src="/js/toast.js"></script>
+  <script>
+    // --- Estado en memoria ---
+    let userName = '';
+    let modoUnirse = false;
+
+    const inputName  = document.getElementById('input-name');
+    const inputCode  = document.getElementById('input-code');
+    const codeWrap   = document.getElementById('code-wrap');
+    const btnCrear   = document.getElementById('btn-crear');
+    const btnUnirse  = document.getElementById('btn-unirse');
+    const avatarPrev = document.getElementById('avatar-preview');
+    const avatarImg  = document.getElementById('avatar-img');
+    const avatarName = document.getElementById('avatar-name');
+
+    // Preview de avatar en tiempo real al escribir
+    inputName.addEventListener('input', () => {
+      const val = inputName.value.trim();
+      if (val) {
+        updateAvatarImg(avatarImg, val);
+        avatarName.textContent = val;
+        avatarPrev.classList.remove('hidden');
+      } else {
+        avatarPrev.classList.add('hidden');
+      }
+    });
+
+    // Modo "unirse": mostrar input de código
+    btnUnirse.addEventListener('click', () => {
+      if (!modoUnirse) {
+        // Mostrar input de código
+        modoUnirse = true;
+        codeWrap.classList.add('open');
+        btnUnirse.textContent = 'Entrar →';
+        btnUnirse.classList.remove('btn-outline');
+        btnUnirse.classList.add('btn-primary');
+        btnCrear.style.display = 'none';
+        setTimeout(() => inputCode.focus(), 350);
+      } else {
+        // Intentar unirse
+        handleUnirse();
+      }
+    });
+
+    // Crear sala
+    btnCrear.addEventListener('click', handleCrear);
+
+    // Enter en inputs
+    inputName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') modoUnirse ? handleUnirse() : handleCrear();
+    });
+
+    inputCode.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleUnirse();
+    });
+
+    // Forzar mayúsculas en código
+    inputCode.addEventListener('input', () => {
+      inputCode.value = inputCode.value.toUpperCase();
+    });
+
+    function validateName() {
+      const val = inputName.value.trim();
+      if (!val) {
+        inputName.classList.add('error');
+        setTimeout(() => inputName.classList.remove('error'), 600);
+        inputName.focus();
+        showToast('Escribe tu nombre primero 😊', 'error');
+        return false;
+      }
+      return val;
+    }
+
+    async function handleCrear() {
+      const name = validateName();
+      if (!name) return;
+
+      btnCrear.disabled = true;
+      btnCrear.textContent = 'Creando sala...';
+
+      try {
+        const res = await fetch('/api/sala/crear', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userName: name, avatarSeed: name.toLowerCase() })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        // Guardar datos de sesión en variables globales de la página
+        sessionData = { userName: name, isHost: true };
+        window.location.href = `/sala/${data.codigo}?u=${encodeURIComponent(name)}&host=1`;
+      } catch (err) {
+        showToast(`Error: ${err.message}`, 'error');
+        btnCrear.disabled = false;
+        btnCrear.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg> Crear sala`;
+      }
+    }
+
+    async function handleUnirse() {
+      const name = validateName();
+      if (!name) return;
+
+      const code = inputCode.value.trim().toUpperCase();
+      if (!code) {
+        inputCode.classList.add('error');
+        setTimeout(() => inputCode.classList.remove('error'), 600);
+        showToast('Ingresa el código de sala', 'error');
+        return;
+      }
+
+      btnUnirse.disabled = true;
+      btnUnirse.textContent = 'Entrando...';
+
+      try {
+        const res = await fetch('/api/sala/unirse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ codigo: code, userName: name })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        window.location.href = `/sala/${code}?u=${encodeURIComponent(name)}&host=0`;
+      } catch (err) {
+        showToast(`❌ ${err.message}`, 'error');
+        btnUnirse.disabled = false;
+        btnUnirse.textContent = 'Entrar →';
+      }
+    }
+  </script>
+</body>
+</html>
