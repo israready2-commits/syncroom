@@ -67,6 +67,12 @@ function initSocket({ roomCode, userName, avatarSeed, isHost, onRoomState, onUse
   socket.on('video-pause',  (data) => onVideoPause  && onVideoPause(data));
   socket.on('video-seek',   (data) => onVideoSeek   && onVideoSeek(data));
   socket.on('video-change', (data) => onVideoChange && onVideoChange(data));
+  // Duración del video Drive enviada por el host
+  socket.on('drive-duration', ({ duration }) => {
+    if (typeof playerState !== 'undefined') {
+      playerState.driveDuration = duration;
+    }
+  });
   socket.on('sync-response',(data) => onSyncResponse && onSyncResponse(data));
 
   return socket;

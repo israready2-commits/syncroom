@@ -183,6 +183,14 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Duración del video Drive (el host la ingresa manualmente y se comparte)
+  socket.on('drive-duration', ({ duration }) => {
+    const sala = salas[socket.roomCode];
+    if (!sala || sala.host.socketId !== socket.id) return;
+    sala.driveDuration = duration;
+    socket.to(socket.roomCode).emit('drive-duration', { duration });
+  });
+
   // Chat
   socket.on('chat-message', ({ text, userName, avatarSeed }) => {
     if (!text || !text.trim()) return;
