@@ -1,9 +1,12 @@
 /* ================================
-   SyncRoom — Player v5
-   Drive: iframe único + overlay de pausa visual + reloj manual
-   El iframe se carga UNA SOLA VEZ. El primer click del usuario
-   activa el autoplay. Desde ahí nuestros controles manejan todo.
-   YouTube: IFrame API completa con control total.
+   SyncRoom — Player v6
+   
+   Drive: <video> HTML5 nativo con URL directa.
+     - El host pega la URL pública del video de Drive
+     - Se carga en un <video> tag con control total JS
+     - play/pause/seek funcionan igual que YouTube
+   
+   YouTube: IFrame API completa.
    ================================ */
 
 const playerState = {
@@ -14,13 +17,8 @@ const playerState = {
   controlsTimeout: null,
   syncCheckInterval: null,
   onSyncUpdate: null,
-  ytPlayer: null,
-  // Reloj manual para Drive
-  driveStartTime: null,
-  driveOffset: 0,
-  drivePlaying: false,
-  driveDuration: 0,        // se llena cuando el host la ingresa, o queda en 0
-  driveActivated: false,   // true después del primer click del usuario
+  videoEl: null,      // elemento <video> nativo
+  ytPlayer: null,     // YT.Player
 };
 
 /* ========================================================
@@ -52,17 +50,10 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
   wrapper && wrapper.addEventListener('touchstart', resetControlsTimer, { passive: true });
   resetControlsTimer();
 
-  // Play / Pause
+  // Play / Pause — solo host
   playBtn && playBtn.addEventListener('click', () => {
     if (!playerState.isHost) return;
     addRipple(playBtn);
-
-    // Si Drive aún no fue activado por el usuario, mostrar instrucción
-    if (playerState.videoType === 'drive' && !playerState.driveActivated) {
-      _mostrarInstruccionClick();
-      return;
-    }
-
     const t = getCurrentTime();
     if (isPlaying()) {
       pauseLocal();
@@ -93,16 +84,19 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
   // Barra de progreso
   progressEl && progressEl.addEventListener('click', (e) => {
     if (!playerState.isHost) return;
-    if (playerState.videoType === 'drive' && playerState.driveDuration === 0) return;
     const rect  = progressEl.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const t     = ratio * getDuration();
+    const dur   = getDuration();
+    if (!dur) return;
+    const t = ratio * dur;
     seekLocal(t);
     onSeek && onSeek(t);
   });
 
-  // Volumen (solo YouTube)
+  // Volumen
   volSlider && volSlider.addEventListener('input', () => {
+    const v = Number(volSlider.value) / 100;
+    if (playerState.videoEl) playerState.videoEl.volume = v;
     if (playerState.ytPlayer) playerState.ytPlayer.setVolume(Number(volSlider.value));
   });
 
@@ -122,7 +116,7 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
     updatePlayBtn();
   }, 500);
 
-  // Invitado verifica sync cada 5s
+  // Invitado pide sync cada 5s
   playerState.syncCheckInterval = setInterval(() => {
     if (!playerState.isHost) emitSyncRequest(getCurrentTime());
   }, 5000);
@@ -137,212 +131,132 @@ function initPlayer({ isHost, onPlay, onPause, onSeek, onSyncUpdate }) {
 }
 
 /* ========================================================
-   DRIVE — carga el iframe UNA SOLA VEZ
-   El primer click en el overlay activa el autoplay del navegador.
-   Después de eso, nuestro overlay de pausa es puramente visual —
-   el iframe sigue corriendo debajo pero tapado.
+   DRIVE — <video> HTML5 nativo
+   
+   Recibe la URL directa del video. El host la obtiene así:
+   1. Abre el video en Drive
+   2. Click en ⋮ → "Obtener enlace" → "Cualquiera con el enlace"
+   3. Copia el link y lo pega en SyncRoom
+   
+   Convertimos el link de Drive a URL de descarga directa.
    ======================================================== */
 function loadDriveVideo(fileId) {
-  playerState.videoType      = 'drive';
-  playerState.videoId        = fileId;
-  playerState.ytPlayer       = null;
-  playerState.drivePlaying   = false;
-  playerState.driveOffset    = 0;
-  playerState.driveStartTime = null;
-  playerState.driveActivated = false;
-  playerState.driveDuration  = 0;
+  playerState.videoType = 'drive';
+  playerState.videoId   = fileId;
+  playerState.ytPlayer  = null;
+
+  // Si fileId es una URL completa, extraer el ID
+  const extractedId = _extractDriveId(fileId);
+  if (extractedId) playerState.videoId = extractedId;
 
   const container = document.getElementById('player-inner');
   if (!container) return;
 
+  // URL de stream progresivo de Drive (funciona para archivos públicos)
+  const videoUrl = `https://drive.google.com/uc?export=download&id=${playerState.videoId}&confirm=t`;
+
   container.innerHTML = `
-    <div id="drive-wrap" style="position:relative;width:100%;height:100%;background:#000;overflow:hidden;">
-
-      <!-- Iframe: cargado una sola vez, sin pointer-events para que
-           el usuario no pueda usar los controles nativos de Drive -->
-      <iframe
-        id="drive-iframe"
-        src="https://drive.google.com/file/d/${fileId}/preview"
-        style="
-          position:absolute;
-          top:-4px; left:0;
-          width:100%;
-          height:calc(100% + 64px);
-          border:none;
-          pointer-events:none;
-        "
-        allow="autoplay; fullscreen"
-        allowfullscreen
-        referrerpolicy="no-referrer-when-downgrade"
-      ></iframe>
-
-      <!-- Capa de intercepción: bloquea clicks hacia el iframe -->
-      <div id="drive-intercept" style="position:absolute;inset:0;z-index:5;"></div>
-
-      <!-- Overlay de activación: primer click del usuario.
-           Necesario por la política de autoplay del navegador. -->
-      <div id="drive-activate-overlay" style="
-        position:absolute;inset:0;z-index:10;
-        background:rgba(13,13,20,0.82);
-        display:flex;flex-direction:column;
-        align-items:center;justify-content:center;gap:16px;
-        cursor:pointer;
-      ">
-        <div style="
-          width:88px;height:88px;
-          background:var(--color-primary);
-          border-radius:50%;
-          display:flex;align-items:center;justify-content:center;
-          box-shadow:0 0 48px var(--color-primary-glow);
-        ">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-        </div>
-        <div style="text-align:center;">
-          <div style="color:#fff;font-size:1rem;font-weight:600;font-family:var(--font-display);margin-bottom:4px;">
-            Click para activar el video
-          </div>
-          <div style="color:rgba(255,255,255,0.5);font-size:0.8rem;">
-            Requerido por el navegador para permitir reproducción
-          </div>
-        </div>
-      </div>
-
-      <!-- Overlay de pausa visual (aparece cuando el host pausa) -->
-      <div id="drive-pause-overlay" style="
-        display:none;
-        position:absolute;inset:0;z-index:8;
-        background:rgba(13,13,20,0.7);
-        align-items:center;justify-content:center;
-        pointer-events:none;
-      ">
-        <div style="
-          width:72px;height:72px;
-          background:rgba(124,92,191,0.9);
-          border-radius:50%;
-          display:flex;align-items:center;justify-content:center;
-        ">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-        </div>
-      </div>
-
-    </div>
+    <video
+      id="native-video"
+      style="width:100%;height:100%;background:#000;display:block;outline:none;"
+      playsinline
+      preload="auto"
+      crossorigin="anonymous"
+    >
+      <source src="${videoUrl}" type="video/mp4">
+    </video>
   `;
 
-  document.getElementById('player-loading') && (document.getElementById('player-loading').style.display = 'none');
+  const video = document.getElementById('native-video');
+  playerState.videoEl = video;
 
-  // El overlay de activación espera el primer click del usuario
-  const activateOverlay = document.getElementById('drive-activate-overlay');
-  activateOverlay.addEventListener('click', () => {
-    _activateDrive();
+  // Ocultar loading cuando el video tenga metadata
+  video.addEventListener('loadedmetadata', () => {
+    document.getElementById('player-loading') && (document.getElementById('player-loading').style.display = 'none');
+  });
+
+  // Si falla la carga directa → mostrar mensaje claro
+  video.addEventListener('error', (e) => {
+    console.error('[SyncRoom] Error cargando video de Drive:', e);
+    document.getElementById('player-loading') && (document.getElementById('player-loading').style.display = 'none');
+    _mostrarErrorDrive(playerState.videoId);
+  });
+
+  // Eventos nativos → socket (solo host, solo si no es sync remota)
+  video.addEventListener('play', () => {
+    if (playerState.ignoreEvents || !playerState.isHost) return;
+    emitPlay(video.currentTime);
+    playerState.onSyncUpdate && playerState.onSyncUpdate(true);
+  });
+
+  video.addEventListener('pause', () => {
+    if (playerState.ignoreEvents || !playerState.isHost) return;
+    emitPause(video.currentTime);
+  });
+
+  video.addEventListener('seeked', () => {
+    if (playerState.ignoreEvents || !playerState.isHost) return;
+    emitSeek(video.currentTime);
   });
 }
 
-function _activateDrive() {
-  // Dar pointer-events al iframe temporalmente para que el navegador
-  // registre la interacción del usuario y permita el autoplay
-  const iframe = document.getElementById('drive-iframe');
-  const overlay = document.getElementById('drive-activate-overlay');
-
-  if (!iframe || !overlay) return;
-
-  // Quitar overlay de activación
-  overlay.style.display = 'none';
-
-  // Habilitar pointer-events en el iframe brevemente para que
-  // el navegador registre el click y permita autoplay
-  iframe.style.pointerEvents = 'auto';
-
-  // Simular click en el centro del iframe (activa el play de Drive)
-  // y volver a quitar pointer-events después
-  setTimeout(() => {
-    iframe.style.pointerEvents = 'none';
-    playerState.driveActivated = true;
-
-    // Si es host: arrancar el reloj y emitir play
-    if (playerState.isHost) {
-      playerState.driveOffset    = 0;
-      playerState.drivePlaying   = true;
-      playerState.driveStartTime = Date.now();
-      emitPlay(0);
-      playerState.onSyncUpdate && playerState.onSyncUpdate(true);
-
-      // Mostrar input de duración para que el host la ingrese
-      _mostrarInputDuracion();
-    }
-    // Si es invitado: el reloj arrancará cuando llegue el evento play del host
-  }, 300);
+function _mostrarErrorDrive(fileId) {
+  const container = document.getElementById('player-inner');
+  if (!container) return;
+  container.innerHTML = `
+    <div style="
+      width:100%;height:100%;
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      gap:16px;padding:24px;text-align:center;
+      background:#0D0D14;
+    ">
+      <div style="font-size:2rem;">⚠️</div>
+      <div style="color:#EEEEF2;font-size:1rem;font-weight:600;font-family:var(--font-display);">
+        No se pudo cargar el video de Drive
+      </div>
+      <div style="color:#7A7A8C;font-size:0.8125rem;max-width:340px;line-height:1.6;">
+        El video debe estar compartido como <strong style="color:#9B7FD4;">"Cualquiera con el enlace puede ver"</strong> en Google Drive.<br><br>
+        Alternativamente, usa <strong style="color:#FF0000;">YouTube</strong> para reproducción sin restricciones.
+      </div>
+      <a
+        href="https://drive.google.com/file/d/${fileId}/view"
+        target="_blank"
+        style="
+          padding:10px 20px;
+          background:var(--color-primary);
+          color:#fff;border-radius:10px;
+          font-size:0.875rem;text-decoration:none;
+        "
+      >Abrir en Drive para verificar →</a>
+    </div>
+  `;
 }
 
-function _mostrarInputDuracion() {
-  // Pequeño toast-panel para que el host ingrese la duración del video
-  const existing = document.getElementById('duration-input-panel');
-  if (existing) return;
-
-  const panel = document.createElement('div');
-  panel.id = 'duration-input-panel';
-  panel.style.cssText = `
-    position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
-    background:var(--color-surface-2);border:1px solid var(--color-border);
-    border-radius:12px;padding:12px 16px;
-    display:flex;align-items:center;gap:10px;
-    z-index:1000;font-size:0.8125rem;color:var(--color-text-muted);
-    box-shadow:0 4px 24px rgba(0,0,0,0.4);
-  `;
-  panel.innerHTML = `
-    <span>Duración del video:</span>
-    <input id="dur-h" type="number" min="0" max="10" placeholder="h"
-      style="width:36px;padding:4px 6px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);text-align:center;">
-    <span style="opacity:0.4;">h</span>
-    <input id="dur-m" type="number" min="0" max="59" placeholder="m"
-      style="width:40px;padding:4px 6px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);text-align:center;">
-    <span style="opacity:0.4;">m</span>
-    <input id="dur-s" type="number" min="0" max="59" placeholder="s"
-      style="width:40px;padding:4px 6px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;color:var(--color-text);text-align:center;">
-    <span style="opacity:0.4;">s</span>
-    <button onclick="_guardarDuracion()" style="
-      padding:5px 12px;background:var(--color-primary);color:#fff;
-      border:none;border-radius:6px;cursor:pointer;font-size:0.8rem;
-    ">OK</button>
-    <button onclick="document.getElementById('duration-input-panel').remove()" style="
-      padding:5px 8px;background:transparent;color:var(--color-text-muted);
-      border:none;cursor:pointer;font-size:1rem;
-    ">✕</button>
-  `;
-  document.body.appendChild(panel);
-}
-
-function _guardarDuracion() {
-  const h = parseInt(document.getElementById('dur-h').value) || 0;
-  const m = parseInt(document.getElementById('dur-m').value) || 0;
-  const s = parseInt(document.getElementById('dur-s').value) || 0;
-  const total = h * 3600 + m * 60 + s;
-  if (total > 0) {
-    playerState.driveDuration = total;
-    // Emitir la duración a los invitados
-    socketState.socket && socketState.socket.emit('drive-duration', { duration: total });
-    showToast(`✓ Duración guardada: ${formatTime(total)}`, 'success');
+function _extractDriveId(input) {
+  if (!input) return null;
+  // Si ya es un ID simple (no URL)
+  if (/^[a-zA-Z0-9_-]{25,}$/.test(input.trim())) return input.trim();
+  // Extraer ID de distintos formatos de URL de Drive
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]+)/,
+    /id=([a-zA-Z0-9_-]+)/,
+    /open\?id=([a-zA-Z0-9_-]+)/,
+  ];
+  for (const p of patterns) {
+    const m = input.match(p);
+    if (m) return m[1];
   }
-  document.getElementById('duration-input-panel') && document.getElementById('duration-input-panel').remove();
-}
-
-function _mostrarInstruccionClick() {
-  showToast('👆 Primero haz click en el video para activarlo', 'info', 3000);
-  // Re-mostrar overlay de activación si fue cerrado
-  const overlay = document.getElementById('drive-activate-overlay');
-  if (overlay) overlay.style.display = 'flex';
-}
-
-function _setDrivePauseOverlay(show) {
-  const el = document.getElementById('drive-pause-overlay');
-  if (el) el.style.display = show ? 'flex' : 'none';
+  return null;
 }
 
 /* ========================================================
-   YOUTUBE
+   YOUTUBE — IFrame API
    ======================================================== */
 function loadYouTubeVideo(videoId) {
   playerState.videoType = 'youtube';
   playerState.videoId   = videoId;
+  playerState.videoEl   = null;
 
   const container = document.getElementById('player-inner');
   if (!container) return;
@@ -352,7 +266,10 @@ function loadYouTubeVideo(videoId) {
     playerState.ytPlayer = new YT.Player('yt-player', {
       videoId,
       width: '100%', height: '100%',
-      playerVars: { controls: 0, disablekb: 1, rel: 0, modestbranding: 1, iv_load_policy: 3, playsinline: 1 },
+      playerVars: {
+        controls: 0, disablekb: 1, rel: 0,
+        modestbranding: 1, iv_load_policy: 3, playsinline: 1,
+      },
       events: {
         onReady(e) {
           e.target.setVolume(80);
@@ -361,8 +278,13 @@ function loadYouTubeVideo(videoId) {
         onStateChange(e) {
           if (playerState.ignoreEvents || !playerState.isHost) return;
           const t = playerState.ytPlayer.getCurrentTime();
-          if (e.data === YT.PlayerState.PLAYING)  { emitPlay(t);  playerState.onSyncUpdate && playerState.onSyncUpdate(true); }
-          if (e.data === YT.PlayerState.PAUSED)   { emitPause(t); }
+          if (e.data === YT.PlayerState.PLAYING) {
+            emitPlay(t);
+            playerState.onSyncUpdate && playerState.onSyncUpdate(true);
+          }
+          if (e.data === YT.PlayerState.PAUSED) {
+            emitPause(t);
+          }
         }
       }
     });
@@ -387,146 +309,77 @@ function loadYouTubeVideo(videoId) {
    CONTROLES LOCALES
    ======================================================== */
 function playLocal() {
-  if (playerState.videoType === 'drive') {
-    if (!playerState.driveActivated) { _mostrarInstruccionClick(); return; }
-    const t = getCurrentTime();
-    playerState.driveOffset    = t;
-    playerState.drivePlaying   = true;
-    playerState.driveStartTime = Date.now();
-    _setDrivePauseOverlay(false);
-    playerState.onSyncUpdate && playerState.onSyncUpdate(true);
-    // El iframe ya está corriendo — solo quitamos el overlay de pausa
+  if (playerState.videoEl) {
+    playerState.videoEl.play().catch(console.warn);
   } else if (playerState.ytPlayer) {
     playerState.ytPlayer.playVideo();
   }
 }
 
 function pauseLocal() {
-  if (playerState.videoType === 'drive') {
-    if (playerState.drivePlaying && playerState.driveStartTime) {
-      playerState.driveOffset += (Date.now() - playerState.driveStartTime) / 1000;
-    }
-    playerState.drivePlaying   = false;
-    playerState.driveStartTime = null;
-    _setDrivePauseOverlay(true);
-    // El iframe sigue corriendo por debajo — el overlay tapa el video
+  if (playerState.videoEl) {
+    playerState.videoEl.pause();
   } else if (playerState.ytPlayer) {
     playerState.ytPlayer.pauseVideo();
   }
 }
 
 function seekLocal(time) {
-  if (playerState.videoType === 'drive') {
-    // Para Drive, seek = reconstruir el iframe en ese segundo
-    // (es la única forma de cambiar el tiempo en un embed de Drive)
-    const wasPlaying           = playerState.drivePlaying;
-    playerState.driveOffset    = Math.max(0, time);
-    playerState.driveStartTime = wasPlaying ? Date.now() : null;
-    playerState.drivePlaying   = wasPlaying;
-
-    const container = document.getElementById('player-inner');
-    if (!container) return;
-    const t   = Math.floor(Math.max(0, time));
-    const src = `https://drive.google.com/file/d/${playerState.videoId}/preview#t=${t}`;
-    const iframe = document.getElementById('drive-iframe');
-    if (iframe) {
-      iframe.src = src;
-      // Después de recargar necesita activación de nuevo si no fue activado
-      if (playerState.driveActivated) {
-        // Dar pointer-events brevemente para que el navegador registre
-        iframe.style.pointerEvents = 'auto';
-        setTimeout(() => { iframe.style.pointerEvents = 'none'; }, 600);
-      }
-    }
-    _setDrivePauseOverlay(!wasPlaying);
+  if (playerState.videoEl) {
+    playerState.videoEl.currentTime = Math.max(0, time);
   } else if (playerState.ytPlayer) {
     playerState.ytPlayer.seekTo(time, true);
   }
 }
 
+// Alias para compatibilidad con onHostLeft en room.html
 function pauseVideo() { pauseLocal(); }
 
 /* ========================================================
    GETTERS
    ======================================================== */
 function getCurrentTime() {
-  if (playerState.videoType === 'drive') {
-    if (playerState.drivePlaying && playerState.driveStartTime) {
-      return playerState.driveOffset + (Date.now() - playerState.driveStartTime) / 1000;
-    }
-    return playerState.driveOffset;
+  if (playerState.videoEl) return playerState.videoEl.currentTime || 0;
+  if (playerState.ytPlayer && playerState.ytPlayer.getCurrentTime) {
+    return playerState.ytPlayer.getCurrentTime() || 0;
   }
-  if (playerState.ytPlayer && playerState.ytPlayer.getCurrentTime) return playerState.ytPlayer.getCurrentTime() || 0;
   return 0;
 }
 
 function getDuration() {
-  if (playerState.videoType === 'drive') return playerState.driveDuration;
-  if (playerState.ytPlayer && playerState.ytPlayer.getDuration) return playerState.ytPlayer.getDuration() || 0;
+  if (playerState.videoEl) return playerState.videoEl.duration || 0;
+  if (playerState.ytPlayer && playerState.ytPlayer.getDuration) {
+    return playerState.ytPlayer.getDuration() || 0;
+  }
   return 0;
 }
 
 function isPlaying() {
-  if (playerState.videoType === 'drive') return playerState.drivePlaying;
-  if (playerState.ytPlayer && playerState.ytPlayer.getPlayerState) return playerState.ytPlayer.getPlayerState() === 1;
+  if (playerState.videoEl) {
+    return !playerState.videoEl.paused && !playerState.videoEl.ended;
+  }
+  if (playerState.ytPlayer && playerState.ytPlayer.getPlayerState) {
+    return playerState.ytPlayer.getPlayerState() === 1;
+  }
   return false;
 }
 
 /* ========================================================
-   HANDLERS REMOTOS
+   HANDLERS REMOTOS — recibidos vía socket
+   ignoreEvents evita el loop: aplicar → evento nativo → re-emitir
    ======================================================== */
 function onRemotePlay({ currentTime }) {
   playerState.ignoreEvents = true;
-  if (playerState.videoType === 'drive') {
-    playerState.driveOffset    = currentTime;
-    playerState.drivePlaying   = true;
-    playerState.driveStartTime = Date.now();
-    // Para el invitado: activar el iframe si es el primer play
-    if (!playerState.driveActivated) {
-      const overlay = document.getElementById('drive-activate-overlay');
-      // El invitado también debe dar click una vez para activar autoplay
-      if (overlay) {
-        overlay.querySelector('div > div:first-child').innerHTML = `
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-        `;
-        overlay.querySelector('div:last-child div:first-child').textContent = 'El host inició la reproducción — click para unirte';
-        overlay.style.cursor = 'pointer';
-        // Al hacer click, activar y unirse
-        overlay.onclick = () => {
-          overlay.style.display = 'none';
-          playerState.driveActivated = true;
-          const iframe = document.getElementById('drive-iframe');
-          if (iframe) {
-            iframe.style.pointerEvents = 'auto';
-            setTimeout(() => { iframe.style.pointerEvents = 'none'; }, 400);
-          }
-          _setDrivePauseOverlay(false);
-          playerState.onSyncUpdate && playerState.onSyncUpdate(true);
-        };
-      }
-    } else {
-      _setDrivePauseOverlay(false);
-    }
-  } else {
-    playerState.ignoreEvents = true;
-    seekLocal(currentTime);
-    if (playerState.ytPlayer) playerState.ytPlayer.playVideo();
-  }
+  seekLocal(currentTime);
+  playLocal();
   setTimeout(() => { playerState.ignoreEvents = false; }, 500);
   playerState.onSyncUpdate && playerState.onSyncUpdate(true);
 }
 
 function onRemotePause({ currentTime }) {
-  playerState.ignoreEvents   = true;
-  playerState.driveOffset    = currentTime;
-  playerState.drivePlaying   = false;
-  playerState.driveStartTime = null;
-  if (playerState.videoType === 'drive') {
-    _setDrivePauseOverlay(true);
-  } else {
-    seekLocal(currentTime);
-    if (playerState.ytPlayer) playerState.ytPlayer.pauseVideo();
-  }
+  playerState.ignoreEvents = true;
+  seekLocal(currentTime);
+  pauseLocal();
   setTimeout(() => { playerState.ignoreEvents = false; }, 500);
 }
 
@@ -540,7 +393,7 @@ function applySyncResponse({ currentTime, serverTimestamp }) {
   const lag        = (Date.now() - serverTimestamp) / 1000;
   const targetTime = currentTime + lag + ((socketState.latency || 0) / 1000);
   const diff       = Math.abs(targetTime - getCurrentTime());
-  if (diff > 3) {
+  if (diff > 2) {
     playerState.ignoreEvents = true;
     seekLocal(targetTime);
     setTimeout(() => { playerState.ignoreEvents = false; }, 500);
@@ -559,11 +412,9 @@ function updateProgressBar(fillEl, timeEl) {
   const cur = getCurrentTime();
   const pct = dur > 0 ? Math.min((cur / dur) * 100, 100) : 0;
   fillEl && (fillEl.style.width = `${pct}%`);
-  if (dur > 0) {
-    timeEl && (timeEl.textContent = `${formatTime(cur)} / ${formatTime(dur)}`);
-  } else {
-    timeEl && (timeEl.textContent = formatTime(cur));
-  }
+  timeEl && (timeEl.textContent = dur > 0
+    ? `${formatTime(cur)} / ${formatTime(dur)}`
+    : formatTime(cur));
 }
 
 function formatTime(secs) {
