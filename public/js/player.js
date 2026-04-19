@@ -152,8 +152,11 @@ function loadDriveVideo(fileId) {
   const container = document.getElementById('player-inner');
   if (!container) return;
 
-  // URL de stream progresivo de Drive (funciona para archivos públicos)
-  const videoUrl = `https://drive.google.com/uc?export=download&id=${playerState.videoId}&confirm=t`;
+  // Usar el proxy del servidor para evitar redirecciones y CORS de Drive
+  // El token de acceso se pasa si el host está autenticado con Google
+  const driveToken = (typeof driveState !== 'undefined' && driveState.accessToken) ? driveState.accessToken : '';
+  const tokenParam = driveToken ? `?token=${encodeURIComponent(driveToken)}` : '';
+  const videoUrl = `/api/drive-stream/${playerState.videoId}${tokenParam}`;
 
   container.innerHTML = `
     <video
@@ -161,9 +164,9 @@ function loadDriveVideo(fileId) {
       style="width:100%;height:100%;background:#000;display:block;outline:none;"
       playsinline
       preload="auto"
-      crossorigin="anonymous"
     >
       <source src="${videoUrl}" type="video/mp4">
+      <source src="${videoUrl}" type="video/webm">
     </video>
   `;
 
