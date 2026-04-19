@@ -113,12 +113,13 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Enviar estado actual al nuevo participante
+    // Enviar estado actual al nuevo participante (incluye token de Drive si hay)
     socket.emit('room-state', {
       video: sala.video,
       videoType: sala.videoType,
       playing: sala.playing,
       currentTime: sala.currentTime,
+      accessToken: sala.driveAccessToken || '',
       host: { userName: sala.host.userName, avatarSeed: sala.host.avatarSeed },
       guests: sala.guests.map(g => ({ userName: g.userName, avatarSeed: g.avatarSeed }))
     });
@@ -158,14 +159,16 @@ io.on('connection', (socket) => {
     socket.to(socket.roomCode).emit('video-seek', { currentTime });
   });
 
-  socket.on('video-change', ({ videoId, videoType }) => {
+  socket.on('video-change', ({ videoId, videoType, accessToken }) => {
     const sala = salas[socket.roomCode];
     if (!sala) return;
     sala.video = videoId;
     sala.videoType = videoType;
     sala.playing = false;
     sala.currentTime = 0;
-    io.to(socket.roomCode).emit('video-change', { videoId, videoType });
+    // Guardar el token para nuevos participantes que se unan después
+    if (accessToken) sala.driveAccessToken = accessToken;
+    io.to(socket.roomCode).emit('video-change', { videoId, videoType, accessToken: accessToken || '' });
   });
 
   // Sincronización — el servidor calcula el tiempo real ajustando por tiempo transcurrido
@@ -232,115 +235,70 @@ app.get('/api/config', (req, res) => {
 });
 
 // --- Proxy de stream para Google Drive ---
-// Resuelve el problema de redirecciones y CORS de Drive
-// El servidor actúa de intermediario entre el cliente y Drive
-app.get('/api/drive-stream/:fileId', async (req, res) => {
+// Recibe el access_token del cliente (obtenido via OAuth2 en el browser)
+// y hace el request autenticado a la Drive API desde el servidor.
+// Esto evita el CORS y el bloqueo de Drive a requests sin auth.
+app.get('/api/drive-stream/:fileId', (req, res) => {
   const { fileId } = req.params;
-
-  // Primero intentar obtener la URL real de stream via Drive API
-  // Si no hay token, usar la URL pública directa
   const token = req.query.token || '';
 
-  // URL base de Drive para streaming
-  const baseUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
-  const fallbackUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`;
+  if (!token) {
+    return res.status(401).send('Token de acceso requerido. El host debe iniciar sesión con Google.');
+  }
 
-  const targetUrl = token ? baseUrl : fallbackUrl;
+  const https = require('https');
 
-  const fetchOptions = {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...(req.headers.range ? { 'Range': req.headers.range } : {}),
-    },
-    redirect: 'manual', // manejar redirecciones manualmente
+  // Esta es la URL que usa Rave internamente — Drive API v3 con alt=media
+  // Con el Bearer token, Google devuelve el video directamente sin redirecciones
+  const driveApiUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`;
+
+  const requestHeaders = {
+    'Authorization': `Bearer ${token}`,
+    'User-Agent': 'Mozilla/5.0 SyncRoom/1.0',
   };
 
-  try {
-    // Importar node-fetch dinámicamente (compatible con CommonJS)
-    let fetchFn;
-    try {
-      fetchFn = require('node-fetch');
-    } catch(e) {
-      // node-fetch v3 es ESM, usar https nativo
-      fetchFn = null;
-    }
-
-    if (!fetchFn) {
-      // Usar https nativo de Node.js
-      const https = require('https');
-      const url = require('url');
-
-      const makeRequest = (reqUrl, redirectCount = 0) => {
-        if (redirectCount > 5) {
-          res.status(500).send('Demasiadas redirecciones');
-          return;
-        }
-
-        const parsedUrl = new url.URL(reqUrl);
-        const options = {
-          hostname: parsedUrl.hostname,
-          path: parsedUrl.pathname + parsedUrl.search,
-          method: 'GET',
-          headers: fetchOptions.headers,
-        };
-
-        const request = https.request(options, (driveRes) => {
-          // Manejar redirecciones
-          if ([301, 302, 303, 307, 308].includes(driveRes.statusCode)) {
-            const location = driveRes.headers['location'];
-            if (location) {
-              driveRes.resume(); // consumir respuesta
-              makeRequest(location.startsWith('http') ? location : `https://drive.google.com${location}`, redirectCount + 1);
-              return;
-            }
-          }
-
-          // Verificar si es HTML (página de confirmación de Drive)
-          const ct = driveRes.headers['content-type'] || '';
-          if (ct.includes('text/html')) {
-            let html = '';
-            driveRes.on('data', chunk => html += chunk);
-            driveRes.on('end', () => {
-              // Buscar la URL de confirmación en el HTML
-              const match = html.match(/action="(\/uc[^"]+)"/);
-              if (match) {
-                const confirmUrl = 'https://drive.google.com' + match[1].replace(/&amp;/g, '&') + '&confirm=t';
-                makeRequest(confirmUrl, redirectCount + 1);
-              } else {
-                res.status(403).send('Acceso denegado. Asegúrate de que el archivo sea público en Drive.');
-              }
-            });
-            return;
-          }
-
-          // Stream del video al cliente
-          res.status(driveRes.statusCode || 200);
-          const allowedHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified'];
-          allowedHeaders.forEach(h => {
-            if (driveRes.headers[h]) res.setHeader(h, driveRes.headers[h]);
-          });
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.setHeader('Cache-Control', 'no-store');
-          driveRes.pipe(res);
-        });
-
-        request.on('error', (err) => {
-          console.error('Drive proxy error:', err);
-          if (!res.headersSent) res.status(500).send('Error al conectar con Drive');
-        });
-
-        request.end();
-      };
-
-      makeRequest(targetUrl);
-    }
-  } catch (err) {
-    console.error('Drive stream error:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+  // Soportar Range requests para que el seek del <video> funcione
+  if (req.headers.range) {
+    requestHeaders['Range'] = req.headers.range;
   }
+
+  const parsedUrl = new (require('url').URL)(driveApiUrl);
+  const options = {
+    hostname: parsedUrl.hostname,
+    path: parsedUrl.pathname + parsedUrl.search,
+    method: 'GET',
+    headers: requestHeaders,
+  };
+
+  const driveReq = https.request(options, (driveRes) => {
+    const status = driveRes.statusCode || 200;
+
+    if (status === 401 || status === 403) {
+      return res.status(status).send('Token inválido o sin permisos para este archivo.');
+    }
+
+    // Pasar los headers necesarios para streaming
+    res.status(status);
+    ['content-type', 'content-length', 'content-range', 'accept-ranges'].forEach(h => {
+      if (driveRes.headers[h]) res.setHeader(h, driveRes.headers[h]);
+    });
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'no-store');
+
+    driveRes.pipe(res);
+
+    req.on('close', () => driveReq.destroy());
+  });
+
+  driveReq.on('error', (err) => {
+    console.error('[SyncRoom] Drive proxy error:', err.message);
+    if (!res.headersSent) res.status(500).send('Error al conectar con Drive API');
+  });
+
+  driveReq.end();
 });
 
+const PORT
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`SyncRoom corriendo en http://localhost:${PORT}`));

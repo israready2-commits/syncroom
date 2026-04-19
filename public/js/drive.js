@@ -1,107 +1,151 @@
 /* ================================
-   SyncRoom — Google Drive + Picker
+   SyncRoom — Google Drive con OAuth2
+   Igual que Rave: el host hace login con Google,
+   obtenemos el access_token, y lo usamos para
+   hacer streaming via Drive API v3.
    ================================ */
 
-// Estado OAuth (en memoria)
 const driveState = {
   accessToken: null,
-  pickerInited: false,
-  gapiInited: false
+  tokenExpiry: null,
 };
 
-const GOOGLE_CLIENT_ID = window.GOOGLE_CLIENT_ID || '';
-const GOOGLE_API_KEY   = window.GOOGLE_API_KEY   || '';
-const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+// Scope mínimo: solo lectura de archivos
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 
 /**
- * Carga las librerías de Google y el Picker.
+ * Inicializa Google Identity Services y el Picker.
+ * onFileSelected({ fileId, fileName, accessToken }) — callback al seleccionar
  */
 function initGooglePicker(onFileSelected) {
-  // Cargar script de gapi si no existe
+  // Cargar Google Identity Services
+  if (!document.getElementById('gis-script')) {
+    const gis = document.createElement('script');
+    gis.id  = 'gis-script';
+    gis.src = 'https://accounts.google.com/gsi/client';
+    gis.async = true;
+    document.head.appendChild(gis);
+  }
+
+  // Cargar gapi para el Picker
   if (!document.getElementById('gapi-script')) {
-    const script = document.createElement('script');
-    script.id = 'gapi-script';
-    script.src = 'https://apis.google.com/js/api.js';
-    script.onload = () => {
-      gapi.load('client:picker', async () => {
-        driveState.gapiInited = true;
-        driveState.pickerInited = true;
-      });
-    };
-    document.head.appendChild(script);
+    const gapi = document.createElement('script');
+    gapi.id  = 'gapi-script';
+    gapi.src = 'https://apis.google.com/js/api.js';
+    gapi.async = true;
+    document.head.appendChild(gapi);
   }
 
   /**
-   * Abre el Google Picker para seleccionar un video.
-   * Llama a onFileSelected({ fileId, fileName }) al seleccionar.
+   * Abre el flujo OAuth2 → Picker → devuelve fileId + accessToken
    */
-  window.openDrivePicker = async function() {
-    if (!GOOGLE_CLIENT_ID) {
-      showToast('⚠️ Google Client ID no configurado — revisa SETUP.md', 'error', 5000);
+  window.openDrivePicker = function() {
+    const clientId = window.GOOGLE_CLIENT_ID || '';
+    if (!clientId) {
+      showToast('⚠️ Google Client ID no configurado — usa el modal de URL', 'error', 5000);
       return;
     }
 
-    // Solicitar token OAuth
+    // Verificar si ya tenemos un token válido
+    if (driveState.accessToken && driveState.tokenExpiry && Date.now() < driveState.tokenExpiry) {
+      _abrirPickerConToken(driveState.accessToken, onFileSelected);
+      return;
+    }
+
+    // Solicitar nuevo token via Google Identity Services
     try {
       const tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: SCOPE,
-        callback: (tokenResponse) => {
-          driveState.accessToken = tokenResponse.access_token;
-          showPicker(onFileSelected);
+        client_id: clientId,
+        scope: DRIVE_SCOPE,
+        callback: (response) => {
+          if (response.error) {
+            showToast('Error al autenticar con Google: ' + response.error, 'error');
+            return;
+          }
+          driveState.accessToken = response.access_token;
+          // El token dura 3600s, guardamos expiración con margen de 5 min
+          driveState.tokenExpiry = Date.now() + (response.expires_in - 300) * 1000;
+          _abrirPickerConToken(response.access_token, onFileSelected);
         }
       });
-      tokenClient.requestAccessToken();
+      tokenClient.requestAccessToken({ prompt: '' });
     } catch (err) {
-      showToast('Error al autenticar con Google', 'error');
-      console.error(err);
+      showToast('Error de autenticación Google. Usa el modal de URL como alternativa.', 'error');
+      console.error('[Drive]', err);
     }
   };
-
-  // Cargar GIS (Google Identity Services)
-  if (!document.getElementById('gis-script')) {
-    const gis = document.createElement('script');
-    gis.id = 'gis-script';
-    gis.src = 'https://accounts.google.com/gsi/client';
-    document.head.appendChild(gis);
-  }
 }
 
-function showPicker(onFileSelected) {
-  if (!driveState.accessToken) return;
+function _abrirPickerConToken(token, onFileSelected) {
+  const apiKey = window.GOOGLE_API_KEY || '';
 
+  // Cargar el módulo picker de gapi
   gapi.load('picker', () => {
-    const view = new google.picker.DocsView(google.picker.ViewId.DOCS_VIDEOS)
+    // Vista de videos en Drive
+    const videoView = new google.picker.DocsView()
       .setIncludeFolders(true)
-      .setSelectFolderEnabled(false);
+      .setSelectFolderEnabled(false)
+      .setMimeTypes('video/mp4,video/webm,video/quicktime,video/x-msvideo,video/mpeg,video/*');
 
-    const picker = new google.picker.PickerBuilder()
-      .addView(view)
-      .setOAuthToken(driveState.accessToken)
-      .setDeveloperKey(GOOGLE_API_KEY)
+    const builder = new google.picker.PickerBuilder()
+      .addView(videoView)
+      .setOAuthToken(token)
       .setCallback((data) => {
         if (data.action === google.picker.Action.PICKED) {
           const doc = data.docs[0];
-          onFileSelected({ fileId: doc.id, fileName: doc.name });
+          onFileSelected({
+            fileId: doc.id,
+            fileName: doc.name,
+            accessToken: token,   // ← clave: pasar el token junto con el fileId
+          });
         }
-      })
-      .build();
+      });
 
-    picker.setVisible(true);
+    if (apiKey) builder.setDeveloperKey(apiKey);
+
+    builder.build().setVisible(true);
   });
 }
 
 /**
- * Extrae el ID de video de una URL de YouTube.
+ * Construye la URL de stream autenticado via nuestro proxy.
+ * Esta URL se mete directo en el <video src="">.
+ */
+function buildDriveStreamUrl(fileId, accessToken) {
+  return `/api/drive-stream/${fileId}?token=${encodeURIComponent(accessToken)}`;
+}
+
+/**
+ * Extrae el videoId de una URL de YouTube.
  */
 function parseYouTubeId(url) {
+  if (!url) return null;
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
     /^([a-zA-Z0-9_-]{11})$/
   ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
   }
+  return null;
+}
+
+/**
+ * Extrae el fileId de una URL de Google Drive.
+ */
+function parseDriveId(url) {
+  if (!url) return null;
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]{10,})/,
+    /id=([a-zA-Z0-9_-]{10,})/,
+    /open\?id=([a-zA-Z0-9_-]{10,})/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  // Si parece un ID directo
+  if (/^[a-zA-Z0-9_-]{25,}$/.test(url.trim())) return url.trim();
   return null;
 }

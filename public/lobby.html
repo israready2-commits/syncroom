@@ -173,13 +173,38 @@
 
   </div>
 
-  <div class="yt-modal-backdrop" id="yt-modal" style="display:none;">
-    <div class="yt-modal">
-      <h3>Agregar video de YouTube</h3>
-      <input type="text" class="input-field" id="yt-url-input" placeholder="https://youtube.com/watch?v=..." autocomplete="off">
-      <div class="yt-modal-actions">
-        <button class="btn btn-ghost" onclick="cerrarYTModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="cargarYouTube()">Cargar video</button>
+  <!-- Modal unificado para elegir video -->
+  <div class="yt-modal-backdrop" id="video-modal" style="display:none;">
+    <div class="yt-modal" style="max-width:460px;">
+      <h3 style="margin-bottom:6px;">🎬 Elegir video</h3>
+      <p style="color:var(--color-text-muted);font-size:0.8125rem;margin-bottom:20px;">Pega una URL de YouTube, Google Drive, o cualquier link directo de video</p>
+
+      <input type="text" class="input-field" id="video-url-input"
+        placeholder="https://youtube.com/... o drive.google.com/..."
+        autocomplete="off" autocorrect="off" spellcheck="false">
+
+      <!-- Tips según el tipo detectado -->
+      <div id="video-url-hint" style="margin-top:10px;font-size:0.75rem;color:var(--color-text-muted);min-height:18px;"></div>
+
+      <!-- Guía para Drive -->
+      <details style="margin-top:14px;cursor:pointer;">
+        <summary style="font-size:0.8125rem;color:var(--color-text-muted);list-style:none;display:flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+          ¿Cómo usar un video de Google Drive?
+        </summary>
+        <div style="margin-top:10px;background:var(--color-surface-2);border-radius:10px;padding:12px;font-size:0.75rem;line-height:1.8;color:var(--color-text-muted);">
+          1. Abre el video en Google Drive<br>
+          2. Click derecho → <strong style="color:var(--color-text);">Compartir</strong><br>
+          3. Cambia acceso a <strong style="color:var(--color-text);">"Cualquiera con el enlace"</strong><br>
+          4. Copia el enlace y pégalo aquí<br>
+          <br>
+          <span style="color:#F59E0B;">⚠️ Si el video no carga, prueba con YouTube — funciona siempre</span>
+        </div>
+      </details>
+
+      <div class="yt-modal-actions" style="margin-top:16px;">
+        <button class="btn btn-ghost" onclick="cerrarModalVideo()">Cancelar</button>
+        <button class="btn btn-primary" onclick="cargarVideo()">Cargar video →</button>
       </div>
     </div>
   </div>
@@ -198,9 +223,11 @@
       const s = document.createElement('script');
       s.src = '/js/drive.js';
       s.onload = () => {
-        initGooglePicker(({ fileId, fileName }) => {
+        initGooglePicker(({ fileId, fileName, accessToken }) => {
           showToast(`🎬 Cargando "${fileName}"...`, 'info');
-          emitVideoChange(fileId, 'drive');
+          // Guardar el token en memoria para usarlo en room.html
+          window._driveAccessToken = accessToken;
+          emitVideoChange(fileId, 'drive', accessToken);
         });
       };
       document.body.appendChild(s);
@@ -221,16 +248,9 @@
     const actionsEl = document.getElementById('lobby-actions');
     if (isHost) {
       actionsEl.innerHTML = `
-        <button class="btn btn-primary btn-full" id="btn-drive" onclick="abrirDrivePicker()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14.28 2.5L19.78 12l-5.5 9.5H9.72L4.22 12l5.5-9.5h4.56zM12 1L5 13l3.5 6h7L19 13 12 1z"/></svg>
-          Elegir video de Drive (Picker)
-        </button>
-        <button class="btn btn-ghost btn-full" onclick="abrirModalURLDrive()" style="font-size:0.875rem;">
-          🔗 Pegar link de Drive directamente
-        </button>
-        <button class="btn-youtube" onclick="abrirYTModal()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-          + YouTube (opcional)
+        <button class="btn btn-primary btn-full" onclick="abrirModalVideo()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          Elegir video
         </button>
       `;
     } else {
@@ -335,35 +355,83 @@
       }
     }
 
-    function abrirYTModal()  { document.getElementById('yt-modal').style.display = 'flex'; }
-    function cerrarYTModal() {
-      document.getElementById('yt-modal').style.display = 'none';
-      document.getElementById('yt-url-input').value = '';
+    function abrirModalVideo() {
+      document.getElementById('video-modal').style.display = 'flex';
+      setTimeout(() => document.getElementById('video-url-input').focus(), 100);
     }
 
-    function cargarYouTube() {
-      const url     = document.getElementById('yt-url-input').value.trim();
-      const videoId = parseYouTubeId(url);
-      if (!videoId) { showToast('URL de YouTube inválida', 'error'); return; }
-      cerrarYTModal();
-      emitVideoChange(videoId, 'youtube');
+    function cerrarModalVideo() {
+      document.getElementById('video-modal').style.display = 'none';
+      document.getElementById('video-url-input').value = '';
+      document.getElementById('video-url-hint').textContent = '';
     }
 
-    function emitVideoChange(videoId, videoType) {
-      socketState.socket && socketState.socket.emit('video-change', { videoId, videoType });
-    }
+    // Detectar tipo de URL mientras escribe
+    document.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('video-url-input');
+      if (!input) return;
+      input.addEventListener('input', () => {
+        const val = input.value.trim();
+        const hint = document.getElementById('video-url-hint');
+        if (!hint) return;
+        if (val.includes('youtube.com') || val.includes('youtu.be')) {
+          hint.innerHTML = '✅ <span style="color:#4ADE80;">YouTube detectado — funcionará perfectamente</span>';
+        } else if (val.includes('drive.google.com') || val.includes('docs.google.com')) {
+          hint.innerHTML = '📁 <span style="color:#F59E0B;">Google Drive — el archivo debe ser público</span>';
+        } else if (val.match(/\.(mp4|webm|mkv|mov|avi|m4v)/i)) {
+          hint.innerHTML = '✅ <span style="color:#4ADE80;">URL directa de video detectada</span>';
+        } else if (val.length > 5) {
+          hint.innerHTML = '🔗 <span style="color:#7A7A8C;">Se intentará cargar como video</span>';
+        } else {
+          hint.textContent = '';
+        }
+      });
+    });
 
-    // Permitir pegar URL directa de Drive como alternativa al Picker
-    function abrirModalURLDrive() {
-      const url = prompt('Pega el link del video de Google Drive:\n(Debe estar compartido como "Cualquiera con el enlace")');
-      if (!url) return;
-      const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-      if (match) {
-        emitVideoChange(match[1], 'drive');
-        showToast('🎬 Video de Drive seleccionado', 'success');
-      } else {
-        showToast('❌ URL de Drive inválida', 'error');
+    function cargarVideo() {
+      const url = document.getElementById('video-url-input').value.trim();
+      if (!url) { showToast('Pega una URL de video', 'error'); return; }
+
+      // YouTube
+      const ytId = parseYouTubeId(url);
+      if (ytId) {
+        cerrarModalVideo();
+        emitVideoChange(ytId, 'youtube');
+        showToast('🎬 Cargando YouTube...', 'info');
+        return;
       }
+
+      // Google Drive — intentar usar el token si ya hizo login
+      const driveId = (typeof parseDriveId === 'function') ? parseDriveId(url) : null;
+      if (driveId && !window._driveAccessToken) {
+        // Pedir que haga login para obtener el token
+        showToast('🔐 Iniciando sesión con Google para Drive...', 'info', 4000);
+        openDrivePicker(); // esto pedirá el token y luego abrirá el picker
+        cerrarModalVideo();
+        return;
+      }
+
+      // Drive con token o URL directa
+      cerrarModalVideo();
+      emitVideoChange(driveId || url, driveId ? 'drive' : 'native');
+      showToast('🎬 Cargando video...', 'info');
+    }
+
+    // Atajos de teclado en el modal
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && document.getElementById('video-modal').style.display === 'flex') {
+        cargarVideo();
+      }
+    });
+
+    function emitVideoChange(videoId, videoType, accessToken) {
+      // El accessToken se pasa para que el invitado pueda hacer stream
+      // del video usando el mismo token del host
+      socketState.socket && socketState.socket.emit('video-change', {
+        videoId,
+        videoType,
+        accessToken: accessToken || window._driveAccessToken || ''
+      });
     }
 
     function irAWatch(videoId, videoType) {
@@ -372,7 +440,7 @@
     }
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') cerrarYTModal();
+      if (e.key === 'Escape') cerrarModalVideo();
     });
   </script>
 </body>

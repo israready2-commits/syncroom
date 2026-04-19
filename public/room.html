@@ -386,6 +386,9 @@
     const initVid  = params.get('vid');
     const initType = params.get('vtype') || 'drive';
 
+    // Token de acceso a Drive (se llena cuando llega el room-state o video-change)
+    let _roomDriveToken = '';
+
     document.getElementById('header-code').textContent = roomCode;
     document.title = `SyncRoom — ${roomCode}`;
 
@@ -534,7 +537,8 @@
       if (initType === 'youtube') {
         loadYouTubeVideo(initVid);
       } else {
-        loadDriveVideo(initVid);
+        // Token llega via room-state; esperar brevemente
+        setTimeout(() => loadDriveVideo(initVid, _roomDriveToken), 600);
       }
     }
 
@@ -546,8 +550,9 @@
         if (state.guests) {
           state.guests.forEach(g => agregarParticipante(g.userName, g.avatarSeed, false));
         }
+        if (state.accessToken) _roomDriveToken = state.accessToken;
         if (state.video && !initVid) {
-          cargarVideoDesdeSocket(state.video, state.videoType);
+          cargarVideoDesdeSocket(state.video, state.videoType, state.accessToken);
           if (state.playing) {
             setTimeout(() => { onRemotePlay({ currentTime: state.currentTime }); updateSyncBadge(true); }, 1500);
           }
@@ -574,7 +579,7 @@
       onVideoPause(data) { onRemotePause(data); },
       onVideoSeek(data) { onRemoteSeek(data); },
       onVideoChange(data) {
-        cargarVideoDesdeSocket(data.videoId, data.videoType);
+        cargarVideoDesdeSocket(data.videoId, data.videoType, data.accessToken);
         agregarAQueue(data.videoId, data.videoType, data.videoId);
         activeVideoIndex = videoQueue.length - 1;
         renderQueue();
@@ -582,17 +587,23 @@
       onSyncResponse(data) { applySyncResponse(data); }
     });
 
-    function cargarVideoDesdeSocket(videoId, videoType) {
-      if (videoType === 'youtube') { loadYouTubeVideo(videoId); } else { loadDriveVideo(videoId); }
+    function cargarVideoDesdeSocket(videoId, videoType, accessToken) {
+      if (accessToken) _roomDriveToken = accessToken;
+      if (videoType === 'youtube') {
+        loadYouTubeVideo(videoId);
+      } else {
+        loadDriveVideo(videoId, _roomDriveToken);
+      }
     }
 
-    initGooglePicker(({ fileId, fileName }) => {
+    initGooglePicker(({ fileId, fileName, accessToken }) => {
       showToast(`🎬 Cargando "${fileName}"...`, 'info');
-      emitVideoChange(fileId, 'drive');
+      if (accessToken) _roomDriveToken = accessToken;
+      emitVideoChange(fileId, 'drive', accessToken);
       agregarAQueue(fileId, 'drive', fileName);
       activeVideoIndex = videoQueue.length - 1;
       renderQueue();
-      loadDriveVideo(fileId);
+      loadDriveVideo(fileId, accessToken);
     });
 
     function abrirYTModal() { document.getElementById('add-yt-modal').style.display = 'flex'; }
